@@ -3,6 +3,8 @@
 //
 // SPDX-License-Identifier: MIT
 
+use std::f64::consts::PI;
+
 use once_cell::sync::Lazy;
 
 /// The matrices were updated 2021-01-25
@@ -182,3 +184,249 @@ impl From<OkLab> for LinSrgb {
 }
 
 // TODO: https://bottosson.github.io/posts/colorpicker/#common-code
+
+#[derive(Clone, Copy, Debug)]
+pub struct OkHsl {
+    pub hue: f64,
+    pub saturation: f64,
+    pub lightness: f64,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct OkHsv {
+    /// Remapped to [0, 1] range
+    pub hue: f64,
+    pub saturation: f64,
+    pub value: f64,
+}
+
+impl From<Srgb> for OkHsv {
+    fn from(val: Srgb) -> Self {
+        let lab = OkLab::from(LinSrgb::from(val));
+
+        let C = (lab.a.powi(2) + lab.b.powi(2)).sqrt();
+        let a_ = lab.a / C;
+        let b_ = lab.b / C;
+
+        let h = 0.5 + 0.5 * (-lab.b).atan2(-lab.a) / PI;
+        let cusp = find_cusp(a_, b_);
+        let st_max = ST::from_cusp(cusp);
+
+        const S0: f64 = 0.5;
+        let k = 1.0 - S0 / st_max.s;
+
+        // first we find L_v, C_v, L_vt and C_vt
+        let t = st_max.t / (C + lab.lightness * st_max.t);
+        let l_v = t * lab.lightness;
+        let c_v = t * C;
+
+        let l_vt = inverse_toe(l_v);
+        let c_vt = c_v * l_vt / l_v;
+
+        let rgb_scale = LinSrgb::from(OkLab {
+            lightness: l_vt,
+            a: a_ * c_vt,
+            b: b_ * c_vt,
+        });
+        let scale_l = (1.0
+            / f64::max(
+                f64::max(rgb_scale.red, rgb_scale.green),
+                f64::max(rgb_scale.blue, 0.0),
+            ))
+        .cbrt();
+        let l = lab.lightness / scale_l;
+        let c = C / scale_l;
+
+        let c = c * toe(l) / l;
+        let l = toe(l);
+
+        Self {
+            hue: h,
+            saturation: (S0 + st_max.t) * c_v / ((st_max.t * S0) + st_max.t * k * c_v),
+            value: l / l_v,
+        }
+    }
+}
+
+impl From<OkHsv> for Srgb {
+    fn from(val: OkHsv) -> Self {
+        let a_ = (2.0 * PI * val.hue).cos();
+        let b_ = (2.0 * PI * val.hue).sin();
+        let cusp = find_cusp(a_, b_);
+        let st_max = ST::from_cusp(cusp);
+
+        const S0: f64 = 0.5;
+        let k = 1.0 - S0 / st_max.s;
+
+        // first we compute L and V as if the gamut is a perfect triangle:
+
+        // L, C when v==1:
+        let l_v = 1.0 - val.saturation * S0 / (S0 + st_max.t - st_max.t * k * val.saturation);
+        let c_v = val.saturation * st_max.t * S0 / (S0 + st_max.t - st_max.t * k * val.saturation);
+
+        let l = val.value * l_v;
+        let c = val.value * c_v;
+
+        // then we compensate for both toe and the curved top part of the triangle:
+        let l_vt = inverse_toe(l_v);
+        let c_vt = c_v * l_vt / l_v;
+
+        let l_new = inverse_toe(l);
+        let c = c * l_new / l;
+        let l = l_new;
+
+        let rgb_scale = LinSrgb::from(OkLab {
+            lightness: l_vt,
+            a: a_ * c_vt,
+            b: b_ * c_vt,
+        });
+        let scale_l = (1.0
+            / f64::max(
+                f64::max(rgb_scale.red, rgb_scale.green),
+                f64::max(rgb_scale.blue, 0.0),
+            ))
+        .cbrt();
+        let l = l * scale_l;
+        let c = c * scale_l;
+
+        LinSrgb::from(OkLab {
+            lightness: l,
+            a: c * a_,
+            b: c * b_,
+        })
+        .into()
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+struct LC {
+    pub lightness: f64,
+    pub chroma: f64,
+}
+
+/// Alternative representation of (L_cusp, C_cusp)
+///
+/// Encoded so S = C_cusp/L_cusp and T = C_cusp/(1-L_cusp)
+/// The maximum value for C in the triangle is then found as
+/// fmin(S*L, T*(1-L)), for a given L
+#[derive(Clone, Copy, Debug)]
+struct ST {
+    pub s: f64,
+    pub t: f64,
+}
+
+impl ST {
+    fn from_cusp(cusp: LC) -> Self {
+        Self {
+            s: cusp.chroma / cusp.lightness,
+            t: cusp.chroma / (1.0 - cusp.lightness),
+        }
+    }
+}
+
+/// toe function for L_r
+fn toe(val: f64) -> f64 {
+    const K1: f64 = 0.206;
+    const K2: f64 = 0.03;
+    const K3: f64 = (K1 + 1.0) / (K2 + 1.0);
+    0.5 * (K3 * val - K1 + ((K3 * val - K1) * (K3 * val - K1) + 4.0 * K2 * K3 * val).sqrt())
+}
+
+/// inverse toe function for L_r
+fn inverse_toe(val: f64) -> f64 {
+    const K1: f64 = 0.206;
+    const K2: f64 = 0.03;
+    const K3: f64 = (K1 + 1.0) / (K2 + 1.0);
+    (val * val + K1 * val) / (K3 * (val + K2))
+}
+
+fn find_cusp(a: f64, b: f64) -> LC {
+    let s_cusp = compute_max_saturation(a, b);
+
+    let max_rgb = LinSrgb::from(OkLab {
+        lightness: 1.0,
+        a: s_cusp * a,
+        b: s_cusp * b,
+    });
+    let lightness = (1.0 / f64::max(max_rgb.red, f64::max(max_rgb.green, max_rgb.blue))).cbrt();
+    LC {
+        lightness,
+        chroma: lightness * s_cusp,
+    }
+}
+/// Finds the maximum saturation possible for a given hue that fits in sRGB
+///
+/// Saturation here is defined as S = C/L
+/// a and b must be normalized so a^2 + b^2 == 1
+fn compute_max_saturation(a: f64, b: f64) -> f64 {
+    // Max saturation will be when one of r, g or b goes below zero.
+
+    // Select different coefficients depending on which component goes below zero first
+    let (k0, k1, k2, k3, k4, wl, wm, ws) = if 1.0 < a.mul_add(-1.881_703_28, -0.809_364_93 * b) {
+        // red component
+        (
+            1.190_862_77,
+            1.765_767_28,
+            0.596_626_41,
+            0.755_151_97,
+            0.567_712_45,
+            4.076_741_662_1,
+            -3.307_711_591_3,
+            0.230_969_929_2,
+        )
+    } else if 1.0 < a.mul_add(1.814_441_04, -1.194_452_76 * b) {
+        // green component
+        (
+            0.739_565_15,
+            -0.459_544_04,
+            0.082_854_27,
+            0.125_410_70,
+            0.145_032_04,
+            -1.268_438_004_6,
+            2.609_757_401_1,
+            -0.341_319_396_5,
+        )
+    } else {
+        // blue component
+        (
+            1.357_336_52,
+            -0.009_157_99,
+            -1.151_302_10,
+            -0.505_596_06,
+            0.006_921_67,
+            -0.004_196_086_3,
+            -0.703_418_614_7,
+            1.707_614_701_0,
+        )
+    };
+
+    // Approximate max saturation using a polynomial:
+    let s = k0 + k1 * a + k2 * b + k3 * a * a + k4 * a * b;
+
+    // Do one step Halley's method to get closer
+    // this gives an error less than 10e6, except for some blue hues where the dS/dh is close to infinite
+    // this should be sufficient for most applications, otherwise do two/three steps
+    let (k_l, k_m, k_s) = (
+        0.396_337_777_4 * a + 0.215_803_757_3 * b,
+        -0.105_561_345_8 * a - 0.063_854_172_8 * b,
+        -0.089_484_177_5 * a - 1.291_485_548_0 * b,
+    );
+
+    let (l_, m_, s_) = (1.0 + s * k_l, 1.0 + s * k_m, 1.0 + s * k_s);
+    let (l, m, s) = (l_.powi(3), m_.powi(3), s_.powi(3));
+    let (l_ds, m_ds, s_ds) = (
+        3.0 * k_l * l_ * l_,
+        3.0 * k_m * m_ * m_,
+        3.0 * k_s * s_ * s_,
+    );
+    let (l_ds2, m_ds2, s_ds2) = (
+        6.0 * k_l * k_l * l_,
+        6.0 * k_m * k_m * m_,
+        6.0 * k_s * k_s * s_,
+    );
+    let f = wl * l + wm * m + ws * s;
+    let f1 = wl * l_ds + wm * m_ds + ws * s_ds;
+    let f2 = wl * l_ds2 + wm * m_ds2 + ws * s_ds2;
+
+    s - f * f1 / (f1 * f1 - 0.5 * f * f2)
+}
