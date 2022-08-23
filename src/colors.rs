@@ -183,8 +183,6 @@ impl From<OkLab> for LinSrgb {
     }
 }
 
-// TODO: https://bottosson.github.io/posts/colorpicker/#common-code
-
 #[derive(Clone, Copy, Debug)]
 pub struct OkHsl {
     pub hue: f64,
@@ -201,14 +199,14 @@ pub struct OkHsv {
 }
 
 impl From<Srgb> for OkHsv {
-    fn from(val: Srgb) -> Self {
-        let lab = OkLab::from(LinSrgb::from(val));
+    fn from(gammad_rgb: Srgb) -> Self {
+        let lab = OkLab::from(LinSrgb::from(gammad_rgb));
 
-        let C = (lab.a.powi(2) + lab.b.powi(2)).sqrt();
-        let a_ = lab.a / C;
-        let b_ = lab.b / C;
+        let chroma = (lab.a.powi(2) + lab.b.powi(2)).sqrt();
+        let a_ = lab.a / chroma;
+        let b_ = lab.b / chroma;
 
-        let h = 0.5 + 0.5 * (-lab.b).atan2(-lab.a) / PI;
+        let hue = lab.b.atan2(lab.a);
         let cusp = find_cusp(a_, b_);
         let st_max = ST::from_cusp(cusp);
 
@@ -216,9 +214,9 @@ impl From<Srgb> for OkHsv {
         let k = 1.0 - S0 / st_max.s;
 
         // first we find L_v, C_v, L_vt and C_vt
-        let t = st_max.t / (C + lab.lightness * st_max.t);
+        let t = st_max.t / (chroma + lab.lightness * st_max.t);
         let l_v = t * lab.lightness;
-        let c_v = t * C;
+        let c_v = t * chroma;
 
         let l_vt = inverse_toe(l_v);
         let c_vt = c_v * l_vt / l_v;
@@ -234,14 +232,17 @@ impl From<Srgb> for OkHsv {
                 f64::max(rgb_scale.blue, 0.0),
             ))
         .cbrt();
-        let l = lab.lightness / scale_l;
-        let c = C / scale_l;
-
-        let c = c * toe(l) / l;
-        let l = toe(l);
+        let scaled_lightness = lab.lightness / scale_l;
+        /* Code from the original source, that is unused here
+         *
+         * let scaled_chroma = chroma / scale_l;
+         *
+         * let scaled_chroma = scaled_chroma * toe(scaled_lightness) / scaled_lightness;
+         */
+        let l = toe(scaled_lightness);
 
         Self {
-            hue: h,
+            hue,
             saturation: (S0 + st_max.t) * c_v / ((st_max.t * S0) + st_max.t * k * c_v),
             value: l / l_v,
         }
@@ -249,9 +250,9 @@ impl From<Srgb> for OkHsv {
 }
 
 impl From<OkHsv> for Srgb {
-    fn from(val: OkHsv) -> Self {
-        let a_ = (2.0 * PI * val.hue).cos();
-        let b_ = (2.0 * PI * val.hue).sin();
+    fn from(hsv: OkHsv) -> Self {
+        let a_ = (hsv.hue).cos();
+        let b_ = (hsv.hue).sin();
         let cusp = find_cusp(a_, b_);
         let st_max = ST::from_cusp(cusp);
 
@@ -261,11 +262,11 @@ impl From<OkHsv> for Srgb {
         // first we compute L and V as if the gamut is a perfect triangle:
 
         // L, C when v==1:
-        let l_v = 1.0 - val.saturation * S0 / (S0 + st_max.t - st_max.t * k * val.saturation);
-        let c_v = val.saturation * st_max.t * S0 / (S0 + st_max.t - st_max.t * k * val.saturation);
+        let l_v = 1.0 - hsv.saturation * S0 / (S0 + st_max.t - st_max.t * k * hsv.saturation);
+        let c_v = hsv.saturation * st_max.t * S0 / (S0 + st_max.t - st_max.t * k * hsv.saturation);
 
-        let l = val.value * l_v;
-        let c = val.value * c_v;
+        let l = hsv.value * l_v;
+        let c = hsv.value * c_v;
 
         // then we compensate for both toe and the curved top part of the triangle:
         let l_vt = inverse_toe(l_v);
