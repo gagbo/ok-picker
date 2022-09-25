@@ -2,6 +2,8 @@
 //
 // SPDX-License-Identifier: GPL-3.0-only
 
+mod colors;
+
 use eframe::egui;
 use egui::{FontData, FontDefinitions, FontFamily};
 
@@ -17,6 +19,7 @@ fn main() {
 #[derive(Default)]
 struct OkPickerApp {
     color: egui::color::Hsva,
+    colour: colors::Srgb,
 }
 
 impl OkPickerApp {

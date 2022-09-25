@@ -3,6 +3,8 @@
 //
 // SPDX-License-Identifier: MIT
 
+use super::{LinSrgb, OkHsv, OkLCh, OkLab, Srgb};
+
 use once_cell::sync::Lazy;
 
 /// The matrices were updated 2021-01-25
@@ -41,13 +43,6 @@ static M2_OKLAB_TO_LIN_SRGB: Lazy<ndarray::Array2<f64>> = Lazy::new(|| {
     ])
 });
 
-#[derive(Clone, Copy, Debug)]
-pub struct Srgb {
-    pub red: f64,
-    pub green: f64,
-    pub blue: f64,
-}
-
 impl From<LinSrgb> for Srgb {
     fn from(linear: LinSrgb) -> Self {
         fn transform(val: f64) -> f64 {
@@ -84,13 +79,6 @@ impl From<Srgb> for LinSrgb {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
-pub struct LinSrgb {
-    pub red: f64,
-    pub green: f64,
-    pub blue: f64,
-}
-
 impl From<&ndarray::Array1<f64>> for LinSrgb {
     fn from(col: &ndarray::Array1<f64>) -> Self {
         let slice = col.as_slice().unwrap();
@@ -109,13 +97,6 @@ impl From<LinSrgb> for ndarray::Array1<f64> {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
-pub struct OkLab {
-    pub lightness: f64,
-    pub a: f64,
-    pub b: f64,
-}
-
 impl From<&ndarray::Array1<f64>> for OkLab {
     fn from(col: &ndarray::Array1<f64>) -> Self {
         let slice = col.as_slice().unwrap();
@@ -132,13 +113,6 @@ impl From<OkLab> for ndarray::Array1<f64> {
     fn from(col: OkLab) -> Self {
         ndarray::arr1(&[col.lightness, col.a, col.b])
     }
-}
-
-#[derive(Clone, Copy, Debug)]
-pub struct OkLCh {
-    pub lightness: f64,
-    pub chroma: f64,
-    pub hue: f64,
 }
 
 impl From<OkLab> for OkLCh {
@@ -179,21 +153,6 @@ impl From<OkLab> for LinSrgb {
         let lms = ndarray::arr1(&[lms_[0].powi(3), lms_[1].powi(3), lms_[2].powi(3)]);
         (&M2_OKLAB_TO_LIN_SRGB.dot(&lms)).into()
     }
-}
-
-#[derive(Clone, Copy, Debug)]
-pub struct OkHsl {
-    pub hue: f64,
-    pub saturation: f64,
-    pub lightness: f64,
-}
-
-#[derive(Clone, Copy, Debug)]
-pub struct OkHsv {
-    /// Remapped to [0, 1] range
-    pub hue: f64,
-    pub saturation: f64,
-    pub value: f64,
 }
 
 impl From<Srgb> for OkHsv {
