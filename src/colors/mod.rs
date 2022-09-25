@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: GPL-3.0-only
 
-use egui::{Color32, Rgba};
+use eframe::egui::{Color32, Rgba};
 
 pub mod conversions;
 

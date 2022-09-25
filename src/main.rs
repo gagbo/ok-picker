@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: GPL-3.0-only
 
-use egui::{
+use eframe::egui::{
     self, CentralPanel, Context, FontData, FontDefinitions, FontFamily, Hyperlink, ScrollArea,
     TopBottomPanel, Vec2,
 };

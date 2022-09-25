@@ -4,9 +4,12 @@
 
 use std::f64::consts::PI;
 
-use egui::{
-    color_picker::show_color, lerp, pos2, remap_clamp, vec2, Color32, Mesh, Painter, Rect,
-    Response, Rgba, Sense, Shape, Stroke, Ui, Vec2,
+use eframe::{
+    egui::{
+        color_picker::show_color, lerp, pos2, remap_clamp, vec2, Color32, Mesh, Painter, Rect,
+        Response, Rgba, Sense, Shape, Stroke, Ui, Vec2,
+    },
+    epaint,
 };
 
 use crate::colors::{OkHsv, Srgb};
