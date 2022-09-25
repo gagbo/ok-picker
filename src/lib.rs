@@ -2,5 +2,5 @@
 //
 // SPDX-License-Identifier: GPL-3.0-only
 
-mod colors;
-mod widgets;
+pub mod colors;
+pub mod widgets;

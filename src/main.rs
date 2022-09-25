@@ -2,10 +2,9 @@
 //
 // SPDX-License-Identifier: GPL-3.0-only
 
-mod colors;
-
 use eframe::egui;
 use egui::{FontData, FontDefinitions, FontFamily};
+use ok_picker::{colors, widgets};
 
 fn main() {
     let native_options = eframe::NativeOptions::default();
