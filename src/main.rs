@@ -7,7 +7,7 @@ use ok_picker::{colors, widgets};
 
 fn main() {
     let win_options = eframe::NativeOptions {
-        initial_window_size: Some(Vec2::new(540.0, 960.0)),
+        initial_window_size: Some(Vec2::new(640.0, 480.0)),
         ..Default::default()
     };
     eframe::run_native(
