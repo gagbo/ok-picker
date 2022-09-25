@@ -3,8 +3,6 @@
 //
 // SPDX-License-Identifier: MIT
 
-use std::f64::consts::PI;
-
 use once_cell::sync::Lazy;
 
 /// The matrices were updated 2021-01-25
