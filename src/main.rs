@@ -2,26 +2,28 @@
 //
 // SPDX-License-Identifier: GPL-3.0-only
 
-use eframe::egui;
-use egui::{FontData, FontDefinitions, FontFamily};
+use egui::{self, FontData, FontDefinitions, FontFamily, Vec2};
 use ok_picker::{colors, widgets};
 
 fn main() {
-    let native_options = eframe::NativeOptions::default();
+    let win_options = eframe::NativeOptions {
+        initial_window_size: Some(Vec2::new(540.0, 960.0)),
+        ..Default::default()
+    };
     eframe::run_native(
         "Ok Picker",
-        native_options,
-        Box::new(|cc| Box::new(OkPickerApp::new(cc))),
+        win_options,
+        Box::new(|cc| Box::new(OkPicker::new(cc))),
     );
 }
 
 #[derive(Default)]
-struct OkPickerApp {
+struct OkPicker {
     color: egui::color::Hsva,
-    colour: colors::Srgb,
+    colour: colors::OkHsv,
 }
 
-impl OkPickerApp {
+impl OkPicker {
     fn fonts() -> FontDefinitions {
         let mut fonts = FontDefinitions::default();
         fonts.font_data.insert(
@@ -55,17 +57,27 @@ impl OkPickerApp {
     }
 }
 
-impl eframe::App for OkPickerApp {
+impl eframe::App for OkPicker {
     fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
-        // TODO: Resize the frame to the widgets it contains
-        egui::CentralPanel::default().show(ctx, |ui| {
+        egui::TopBottomPanel::top("OkPicker").show(ctx, |ui| {
+            ui.label("Experiments for a color picker app in a better color space.");
+        });
+        egui::Window::new("RGB").show(ctx, |ui| {
+            ui.spacing_mut().slider_width = 100.0;
             ui.heading(format!("OkPicker chose {:#?}", self.color.to_srgb()));
-            // TODO: Make an OkHSV widget for egui
             egui::widgets::color_picker::color_picker_hsva_2d(
                 ui,
                 &mut self.color,
                 egui::color_picker::Alpha::Opaque,
             );
+        });
+        egui::Window::new("Ok HSV").show(ctx, |ui| {
+            ui.spacing_mut().slider_width = 100.0;
+            ui.heading(format!(
+                "OkHSV chose {:#?}",
+                colors::Srgb::from(self.colour)
+            ));
+            widgets::color_picker_okhsv_2d(ui, &mut self.colour);
         });
     }
 }
