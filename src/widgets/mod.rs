@@ -81,28 +81,53 @@ fn color_picker_okhsv_2d_impl(ui: &mut Ui, okhsv: &mut OkHsv) {
 
 fn color_text_ui(ui: &mut Ui, color: impl Into<Srgb>) {
     let color = color.into();
-    ui.horizontal(|ui| {
-        let Srgb { red, green, blue } = color;
+    ui.vertical(|ui| {
+        ui.horizontal(|ui| {
+            let Srgb { red, green, blue } = color;
 
-        let hsv = OkHsv::from(color);
+            let r = (256.0 * red).floor() as u8;
+            let g = (256.0 * green).floor() as u8;
+            let b = (256.0 * blue).floor() as u8;
 
-        let r = (256.0 * red).floor() as u8;
-        let g = (256.0 * green).floor() as u8;
-        let b = (256.0 * blue).floor() as u8;
+            if ui.button("📋").on_hover_text("Click to copy").clicked() {
+                ui.output().copied_text = format!("{}, {}, {}", r, g, b);
+            }
 
-        if ui.button("📋").on_hover_text("Click to copy").clicked() {
-            ui.output().copied_text = format!("{}, {}, {}", r, g, b);
-        }
+            ui.label(format!("rgb({}, {}, {})", r, g, b))
+                .on_hover_text("Red Green Blue");
+        });
+        ui.horizontal(|ui| {
+            let Srgb { red, green, blue } = color;
 
-        ui.label(format!("rgb({}, {}, {})", r, g, b))
-            .on_hover_text("Red Green Blue");
-        ui.label(format!("rgb(#{:02X}{:02X}{:02X})", r, g, b))
-            .on_hover_text("Red Green Blue, Hex");
-        ui.label(format!(
-            "okhsv({}, {}, {})",
-            hsv.hue, hsv.saturation, hsv.value
-        ))
-        .on_hover_text("Hue Saturation Value, OkHSV");
+            let r = (256.0 * red).floor() as u8;
+            let g = (256.0 * green).floor() as u8;
+            let b = (256.0 * blue).floor() as u8;
+
+            if ui.button("📋").on_hover_text("Click to copy").clicked() {
+                ui.output().copied_text = format!("#{:02X}{:02X}{:02X}", r, g, b);
+            }
+
+            ui.label(format!("rgb(#{:02X}{:02X}{:02X})", r, g, b))
+                .on_hover_text("Red Green Blue, Hex");
+        });
+        ui.horizontal(|ui| {
+            let hsv = OkHsv::from(color);
+
+            if ui.button("📋").on_hover_text("Click to copy").clicked() {
+                ui.output().copied_text = format!("{}, {}, {}", hsv.hue, hsv.saturation, hsv.value);
+            }
+
+            // Approx 512 even steps for the rounding
+            let trunc = 1.0 / 2.0_f64.powi(9);
+
+            ui.label(format!(
+                "okhsv({}, {}, {})",
+                trunc * (hsv.hue / trunc).trunc(),
+                trunc * (hsv.saturation / trunc).trunc(),
+                trunc * (hsv.value / trunc).trunc()
+            ))
+            .on_hover_text("Hue Saturation Value, OkHSV");
+        });
     });
 }
 

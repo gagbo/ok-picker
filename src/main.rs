@@ -58,13 +58,13 @@ impl OkPicker {
 }
 
 impl eframe::App for OkPicker {
-    fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
+    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         egui::TopBottomPanel::top("OkPicker").show(ctx, |ui| {
             ui.label("Experiments for a color picker app in a better color space.");
         });
+        egui::CentralPanel::default().show(ctx, |_ui| {});
         egui::Window::new("RGB").show(ctx, |ui| {
             ui.spacing_mut().slider_width = 100.0;
-            ui.heading(format!("OkPicker chose {:#?}", self.color.to_srgb()));
             egui::widgets::color_picker::color_picker_hsva_2d(
                 ui,
                 &mut self.color,
@@ -73,10 +73,6 @@ impl eframe::App for OkPicker {
         });
         egui::Window::new("Ok HSV").show(ctx, |ui| {
             ui.spacing_mut().slider_width = 100.0;
-            ui.heading(format!(
-                "OkHSV chose {:#?}",
-                colors::Srgb::from(self.colour)
-            ));
             widgets::color_picker_okhsv_2d(ui, &mut self.colour);
         });
     }
