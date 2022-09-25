@@ -22,7 +22,7 @@ const N: u32 = 6 * 6;
 pub fn color_picker_okhsv_2d(ui: &mut Ui, okhsv: &mut OkHsv) -> bool {
     let mut new_okhsv = *okhsv;
 
-    ui.vertical(|ui| {
+    ui.vertical_centered(|ui| {
         color_picker_okhsv_2d_impl(ui, &mut new_okhsv);
     });
 
@@ -81,7 +81,7 @@ fn color_picker_okhsv_2d_impl(ui: &mut Ui, okhsv: &mut OkHsv) {
 
 fn color_text_ui(ui: &mut Ui, color: impl Into<Srgb>) {
     let color = color.into();
-    ui.vertical(|ui| {
+    ui.vertical_centered(|ui| {
         ui.horizontal(|ui| {
             let Srgb { red, green, blue } = color;
 

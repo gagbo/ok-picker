@@ -2,7 +2,10 @@
 //
 // SPDX-License-Identifier: GPL-3.0-only
 
-use egui::{self, FontData, FontDefinitions, FontFamily, Vec2};
+use egui::{
+    self, CentralPanel, Context, FontData, FontDefinitions, FontFamily, Hyperlink, ScrollArea,
+    TopBottomPanel, Vec2,
+};
 use ok_picker::{colors, widgets};
 
 fn main() {
@@ -57,23 +60,54 @@ impl OkPicker {
     }
 }
 
-impl eframe::App for OkPicker {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        egui::TopBottomPanel::top("OkPicker").show(ctx, |ui| {
+fn render_footer(ctx: &Context) {
+    TopBottomPanel::bottom("Footer").show(ctx, |ui| {
+        ui.vertical_centered(|ui| {
+            ui.add_space(5.);
+            ui.add(Hyperlink::from_label_and_url(
+                "Source",
+                "https://github.com/gagbo/ok-picker",
+            ));
+            ui.add_space(5.);
+        })
+    });
+}
+
+fn render_header(ctx: &Context) {
+    TopBottomPanel::top("header").show(ctx, |ui| {
+        ui.vertical_centered(|ui| {
+            ui.add_space(5.);
             ui.label("Experiments for a color picker app in a better color space.");
-        });
-        egui::CentralPanel::default().show(ctx, |_ui| {});
-        egui::Window::new("RGB").show(ctx, |ui| {
-            ui.spacing_mut().slider_width = 100.0;
-            egui::widgets::color_picker::color_picker_hsva_2d(
-                ui,
-                &mut self.color,
-                egui::color_picker::Alpha::Opaque,
-            );
-        });
-        egui::Window::new("Ok HSV").show(ctx, |ui| {
-            ui.spacing_mut().slider_width = 100.0;
-            widgets::color_picker_okhsv_2d(ui, &mut self.colour);
+            ui.add_space(5.);
+        })
+    });
+}
+impl eframe::App for OkPicker {
+    fn update(&mut self, ctx: &Context, _frame: &mut eframe::Frame) {
+        render_footer(ctx);
+        render_header(ctx);
+        CentralPanel::default().show(ctx, |ui| {
+            ScrollArea::vertical().show(ui, |ui| {
+                ui.vertical_centered(|ui| {
+                    ui.label("RGB");
+                    ui.spacing_mut().slider_width = 100.0;
+                    egui::widgets::color_picker::color_picker_hsva_2d(
+                        ui,
+                        &mut self.color,
+                        egui::color_picker::Alpha::Opaque,
+                    );
+                });
+
+                ui.add_space(5.0);
+                ui.separator();
+                ui.add_space(5.0);
+
+                ui.vertical_centered(|ui| {
+                    ui.label("OkHSV");
+                    ui.spacing_mut().slider_width = 100.0;
+                    widgets::color_picker_okhsv_2d(ui, &mut self.colour);
+                });
+            });
         });
     }
 }
