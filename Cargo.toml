@@ -8,6 +8,9 @@ version = "0.0.1"
 edition = "2021"
 license = "GPL-3.0-only"
 default-run = "ok-picker"
+homepage = "https://github.com/gagbo/ok-picker"
+repository = "https://github.com/gagbo/ok-picker"
+description = "A color picker application focused on colorscheming in Ok colorspace (from Björn Ottosson)"
 
 [[bin]]
 name = "ok-picker"
