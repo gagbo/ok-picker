@@ -3,7 +3,13 @@
 //
 // SPDX-License-Identifier: MIT
 
-use super::{LinSrgb, OkHsv, OkLCh, OkLab, Srgb};
+//! Colorspace conversions
+//!
+//! Yes, it could be shaders. It could.
+
+// TODO: fix NaN issues when converting very dark colors.
+
+use super::{LinSrgb, OkHsl, OkHsv, OkLCh, OkLab, Srgb};
 
 use once_cell::sync::Lazy;
 
@@ -256,6 +262,96 @@ impl From<OkHsv> for Srgb {
     }
 }
 
+impl From<OkHsl> for Srgb {
+    fn from(hsl: OkHsl) -> Self {
+        if hsl.lightness == 1.0 {
+            return Self {
+                red: 1.0,
+                green: 1.0,
+                blue: 1.0,
+            };
+        }
+
+        if hsl.lightness == 0.0 {
+            return Self {
+                red: 0.0,
+                green: 0.0,
+                blue: 0.0,
+            };
+        }
+
+        let a = hsl.hue.cos();
+        let b = hsl.hue.sin();
+        let l = inverse_toe(hsl.lightness);
+
+        let Cs { c_0, c_mid, c_max } = Cs::from(OkLab { lightness: l, a, b });
+
+        let mid = 0.8;
+        let mid_inv = 1.25_f64;
+
+        let c = if hsl.saturation < mid {
+            let t = mid_inv * hsl.saturation;
+            let k_1 = mid * c_0;
+            let k_2 = 1.0 - k_1 / c_mid;
+
+            t * k_1 / (1.0 - k_2 * t)
+        } else {
+            let t = (hsl.saturation - mid) / (1.0 - mid);
+            let k_0 = c_mid;
+            let k_1 = (1.0 - mid) * c_mid.powi(2) * mid_inv.powi(2) / c_0;
+            let k_2 = 1.0 - k_1 / (c_max - c_mid);
+
+            k_0 + t * k_1 / (1.0 - k_2 * t)
+        };
+
+        Self::from(LinSrgb::from(OkLab {
+            lightness: l,
+            a: c * a,
+            b: c * b,
+        }))
+    }
+}
+
+impl From<Srgb> for OkHsl {
+    fn from(rgb: Srgb) -> Self {
+        let lab = OkLab::from(LinSrgb::from(rgb));
+
+        let c = (lab.a.powi(2) + lab.b.powi(2)).sqrt();
+        let a_ = lab.a / c;
+        let b_ = lab.b / c;
+        let lightness = lab.lightness;
+        let hue = lab.b.atan2(lab.a);
+
+        let Cs { c_0, c_mid, c_max } = Cs::from(OkLab {
+            lightness,
+            a: a_,
+            b: b_,
+        });
+        // Inverse of the interpolation in Srgb::from::<OkHsl>()
+        let mid = 0.8;
+        let mid_inv = 1.25_f64;
+
+        let saturation = if c < c_mid {
+            let k_1 = mid * c_0;
+            let k_2 = 1.0 - k_1 / c_mid;
+
+            mid * c / (k_1 + k_2 * c)
+        } else {
+            let k_0 = c_mid;
+            let k_1 = (1.0 - mid) * c_mid.powi(2) * mid_inv.powi(2) / c_0;
+            let k_2 = 1.0 - k_1 / (c_max - c_mid);
+
+            mid + (1.0 - mid) * (c - k_0) / (k_1 + k_2 * (c - k_0))
+        };
+
+        Self {
+            hue,
+            saturation,
+            lightness,
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug)]
 struct LC {
     pub lightness: f64,
@@ -278,6 +374,31 @@ impl ST {
         Self {
             s: cusp.chroma / cusp.lightness,
             t: cusp.chroma / (1.0 - cusp.lightness),
+        }
+    }
+
+    /// Returns a smooth approximation of the location of the cusp
+    /// This polynomial was created by an optimization process
+    /// It has been designed so that S_mid < S_max and T_mid < T_max
+    fn mid(a: f64, b: f64) -> Self {
+        Self {
+            s: 0.115_169_93
+                + 1.0
+                    / (7.447_789_70
+                        + 4.159_012_40 * b
+                        + a * (-2.195_573_47
+                            + 1.751_984_01 * b
+                            + a * (-2.137_049_48 - 10.023_010_43 * b
+                                + a * (-4.248_945_61 + 5.387_708_19 * b + 4.698_910_13 * a)))),
+
+            t: 0.112_396_42
+                + 1.0
+                    / (1.613_203_20 - 0.681_243_79 * b
+                        + a * (0.403_706_12
+                            + 0.901_481_23 * b
+                            + a * (-0.270_879_43
+                                + 0.612_239_90 * b
+                                + a * (0.002_992_15 - 0.453_995_68 * b - 0.146_618_72 * a)))),
         }
     }
 }
@@ -328,9 +449,9 @@ fn compute_max_saturation(a: f64, b: f64) -> f64 {
             0.596_626_41,
             0.755_151_97,
             0.567_712_45,
-            4.076_741_662_1,
-            -3.307_711_591_3,
-            0.230_969_929_2,
+            M2_OKLAB_TO_LIN_SRGB[[0, 0]],
+            M2_OKLAB_TO_LIN_SRGB[[0, 1]],
+            M2_OKLAB_TO_LIN_SRGB[[0, 2]],
         )
     } else if 1.0 < a.mul_add(1.814_441_04, -1.194_452_76 * b) {
         // green component
@@ -340,9 +461,9 @@ fn compute_max_saturation(a: f64, b: f64) -> f64 {
             0.082_854_27,
             0.125_410_70,
             0.145_032_04,
-            -1.268_438_004_6,
-            2.609_757_401_1,
-            -0.341_319_396_5,
+            M2_OKLAB_TO_LIN_SRGB[[1, 0]],
+            M2_OKLAB_TO_LIN_SRGB[[1, 1]],
+            M2_OKLAB_TO_LIN_SRGB[[1, 2]],
         )
     } else {
         // blue component
@@ -352,9 +473,9 @@ fn compute_max_saturation(a: f64, b: f64) -> f64 {
             -1.151_302_10,
             -0.505_596_06,
             0.006_921_67,
-            -0.004_196_086_3,
-            -0.703_418_614_7,
-            1.707_614_701_0,
+            M2_OKLAB_TO_LIN_SRGB[[2, 0]],
+            M2_OKLAB_TO_LIN_SRGB[[2, 1]],
+            M2_OKLAB_TO_LIN_SRGB[[2, 2]],
         )
     };
 
@@ -365,9 +486,9 @@ fn compute_max_saturation(a: f64, b: f64) -> f64 {
     // this gives an error less than 10e6, except for some blue hues where the dS/dh is close to infinite
     // this should be sufficient for most applications, otherwise do two/three steps
     let (k_l, k_m, k_s) = (
-        0.396_337_777_4 * a + 0.215_803_757_3 * b,
-        -0.105_561_345_8 * a - 0.063_854_172_8 * b,
-        -0.089_484_177_5 * a - 1.291_485_548_0 * b,
+        M1_OKLAB_TO_LIN_SRGB[[0, 1]] * a + M1_OKLAB_TO_LIN_SRGB[[0, 2]] * b,
+        M1_OKLAB_TO_LIN_SRGB[[1, 1]] * a + M1_OKLAB_TO_LIN_SRGB[[1, 2]] * b,
+        M1_OKLAB_TO_LIN_SRGB[[2, 1]] * a + M1_OKLAB_TO_LIN_SRGB[[2, 2]] * b,
     );
 
     let (l_, m_, s_) = (1.0 + s * k_l, 1.0 + s * k_m, 1.0 + s * k_s);
@@ -387,4 +508,368 @@ fn compute_max_saturation(a: f64, b: f64) -> f64 {
     let f2 = wl * l_ds2 + wm * m_ds2 + ws * s_ds2;
 
     s - f * f1 / (f1 * f1 - 0.5 * f * f2)
+}
+
+#[derive(Clone, Copy, Debug)]
+struct Cs {
+    c_0: f64,
+    c_mid: f64,
+    c_max: f64,
+}
+
+impl From<OkLab> for Cs {
+    fn from(lab: OkLab) -> Self {
+        let cusp = find_cusp(lab.a, lab.b);
+        let c_max = find_gamut_intersection(lab.a, lab.b, lab.lightness, 1.0, lab.lightness, cusp);
+        let st_max = ST::from_cusp(cusp);
+        let k = c_max / (lab.lightness * st_max.s).min((1.0 - lab.lightness) * st_max.t);
+        let st_mid = ST::mid(lab.a, lab.b);
+
+        // Use a soft minimum function, instead of a sharp triangle shape to get a smooth value for chroma.
+        let c_a = lab.lightness * st_mid.s;
+        let c_b = (1.0 - lab.lightness) * st_mid.t;
+        let c_mid = 0.9 * k * (c_a.powi(-4) + c_b.powi(-4)).powi(-1).sqrt().sqrt();
+
+        // for C_0, the shape is independent of hue, so ST are constant. Values picked to roughly be the average values of ST.
+        let c_a = lab.lightness * 0.4;
+        let c_b = (1.0 - lab.lightness) * 0.8;
+        let c_0 = (c_a.powi(-2) + c_b.powi(-2)).powi(-1).sqrt();
+
+        Self { c_0, c_mid, c_max }
+    }
+}
+
+/// Finds intersection of the line defined by
+/// L = L0 * (1 - t) + t * L1;
+/// C = t * C1;
+/// a and b must be normalized so a^2 + b^2 == 1
+fn find_gamut_intersection(a: f64, b: f64, l1: f64, c1: f64, l0: f64, cusp: LC) -> f64 {
+    // Find the intersection for upper and lower half seprately
+    if (l1 - l0) * cusp.chroma <= (cusp.lightness - l0) * c1 {
+        // Lower half
+        cusp.chroma * l0 / (c1 * cusp.lightness + cusp.chroma * (l0 - l1))
+    } else {
+        // Upper half
+
+        // First intersect with triangle
+        let mut target =
+            cusp.chroma * (l0 - 1.0) / (c1 * (cusp.lightness - 1.0) + cusp.chroma * (l0 - l1));
+        // Then one step Halley's method
+
+        let d_l = l1 - l0;
+        let d_c = c1;
+        let k_l = M1_OKLAB_TO_LIN_SRGB[[0, 1]] * a + M1_OKLAB_TO_LIN_SRGB[[0, 2]] * b;
+        let k_m = M1_OKLAB_TO_LIN_SRGB[[1, 1]] * a + M1_OKLAB_TO_LIN_SRGB[[1, 2]] * b;
+        let k_s = M1_OKLAB_TO_LIN_SRGB[[2, 1]] * a + M1_OKLAB_TO_LIN_SRGB[[2, 2]] * b;
+
+        let l_dt = d_l + d_c * k_l;
+        let m_dt = d_l + d_c * k_m;
+        let s_dt = d_l + d_c * k_s;
+
+        // If higher accuracy is required, 2 or 3 iterations of the following block can be used:
+        {
+            let l = l0 * (1.0 - target) + target * l1;
+            let c = target * c1;
+
+            let l_ = l + c * k_l;
+            let m_ = l + c * k_m;
+            let s_ = l + c * k_s;
+
+            let l_c = l_.powi(3);
+            let m_c = m_.powi(3);
+            let s_c = s_.powi(3);
+
+            let ldt = 3.0 * l_dt * l_ * l_;
+            let mdt = 3.0 * m_dt * m_ * m_;
+            let sdt = 3.0 * s_dt * s_ * s_;
+
+            let ldt2 = 6.0 * l_dt * l_dt * l_;
+            let mdt2 = 6.0 * m_dt * m_dt * m_;
+            let sdt2 = 6.0 * s_dt * s_dt * s_;
+
+            let r = M2_OKLAB_TO_LIN_SRGB[[0, 0]] * l_c
+                + M2_OKLAB_TO_LIN_SRGB[[0, 1]] * m_c
+                + M2_OKLAB_TO_LIN_SRGB[[0, 2]] * s_c
+                - 1.0;
+            let r1 = M2_OKLAB_TO_LIN_SRGB[[0, 0]] * ldt
+                + M2_OKLAB_TO_LIN_SRGB[[0, 1]] * mdt
+                + M2_OKLAB_TO_LIN_SRGB[[0, 2]] * sdt;
+            let r2 = M2_OKLAB_TO_LIN_SRGB[[0, 0]] * ldt2
+                + M2_OKLAB_TO_LIN_SRGB[[0, 1]] * mdt2
+                + M2_OKLAB_TO_LIN_SRGB[[0, 2]] * sdt2;
+
+            let u_r = r1 / (r1 * r1 - 0.5 * r * r2);
+            let t_r = if u_r.is_sign_positive() {
+                Some(-r * u_r)
+            } else {
+                None
+            };
+
+            let g = M2_OKLAB_TO_LIN_SRGB[[1, 0]] * l_c
+                + M2_OKLAB_TO_LIN_SRGB[[1, 1]] * m_c
+                + M2_OKLAB_TO_LIN_SRGB[[1, 2]] * s_c
+                - 1.0;
+            let g1 = M2_OKLAB_TO_LIN_SRGB[[1, 0]] * ldt
+                + M2_OKLAB_TO_LIN_SRGB[[1, 1]] * mdt
+                + M2_OKLAB_TO_LIN_SRGB[[1, 2]] * sdt;
+            let g2 = M2_OKLAB_TO_LIN_SRGB[[1, 0]] * ldt2
+                + M2_OKLAB_TO_LIN_SRGB[[1, 1]] * mdt2
+                + M2_OKLAB_TO_LIN_SRGB[[1, 2]] * sdt2;
+
+            let u_g = g1 / (g1 * g1 - 0.5 * g * g2);
+            let t_g = if u_g.is_sign_positive() {
+                Some(-g * u_g)
+            } else {
+                None
+            };
+
+            let b = M2_OKLAB_TO_LIN_SRGB[[2, 0]] * l_c
+                + M2_OKLAB_TO_LIN_SRGB[[2, 1]] * m_c
+                + M2_OKLAB_TO_LIN_SRGB[[2, 2]] * s_c
+                - 1.0;
+            let b1 = M2_OKLAB_TO_LIN_SRGB[[2, 0]] * ldt
+                + M2_OKLAB_TO_LIN_SRGB[[2, 1]] * mdt
+                + M2_OKLAB_TO_LIN_SRGB[[2, 2]] * sdt;
+            let b2 = M2_OKLAB_TO_LIN_SRGB[[2, 0]] * ldt2
+                + M2_OKLAB_TO_LIN_SRGB[[2, 1]] * mdt2
+                + M2_OKLAB_TO_LIN_SRGB[[2, 2]] * sdt2;
+
+            let u_b = b1 / (b1 * b1 - 0.5 * b * b2);
+            let t_b = if u_b.is_sign_positive() {
+                Some(-b * u_b)
+            } else {
+                None
+            };
+
+            target += [t_r, t_g, t_b]
+                .into_iter()
+                .flatten()
+                .min_by(|x, y| x.partial_cmp(y).unwrap_or(std::cmp::Ordering::Equal))
+                .unwrap_or(0.0)
+        }
+
+        target
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const ACCEPTABLE_ERROR: f64 = 0.00001;
+
+    #[test]
+    fn okhsl_srgb() {
+        let hue_steps = 200;
+        let sat_steps = 200;
+        let light_steps = 200;
+        for hue_step in 0..hue_steps {
+            for sat_step in 0..sat_steps {
+                for light_step in 0..light_steps {
+                    let init_col = OkHsl {
+                        hue: hue_step as f64 * 2.0 * std::f64::consts::PI,
+                        saturation: sat_step as f64 / sat_steps as f64,
+                        lightness: light_step as f64 / light_steps as f64,
+                    };
+                    let return_col = OkHsl::from(Srgb::from(init_col));
+                    // Comparing with f32 epsilon to allow some leeway
+                    if init_col.hue.abs() > std::f32::EPSILON as f64 {
+                        let error = (init_col.hue - return_col.hue).abs() / init_col.hue.abs();
+                        assert!(
+                            error < ACCEPTABLE_ERROR,
+                            "The hue is too different: input {} -> {} output ({})",
+                            init_col.hue,
+                            return_col.hue,
+                            error
+                        );
+                    } else {
+                        assert!(
+                            return_col.hue.abs() <= std::f32::EPSILON as f64,
+                            "The hue should be negligible, got {} instead",
+                            return_col.hue
+                        );
+                    }
+
+                    if init_col.saturation.abs() > std::f32::EPSILON as f64 {
+                        let error = (init_col.saturation - return_col.saturation).abs()
+                            / init_col.saturation.abs();
+                        assert!(
+                            error < ACCEPTABLE_ERROR,
+                            "The saturation is too different: input {} -> {} output ({})",
+                            init_col.saturation,
+                            return_col.saturation,
+                            error
+                        );
+                    } else {
+                        assert!(
+                            return_col.saturation.abs() <= std::f32::EPSILON as f64,
+                            "The saturation should be negligible, got {} instead",
+                            return_col.saturation
+                        );
+                    }
+
+                    if init_col.lightness.abs() > std::f32::EPSILON as f64 {
+                        let error = (init_col.lightness - return_col.lightness).abs()
+                            / init_col.lightness.abs();
+                        assert!(
+                            error < ACCEPTABLE_ERROR,
+                            "The lightness is too different: input {} -> {} output ({})",
+                            init_col.lightness,
+                            return_col.lightness,
+                            error
+                        );
+                    } else {
+                        assert!(
+                            return_col.lightness.abs() <= std::f32::EPSILON as f64,
+                            "The lightness should be negligible, got {} instead",
+                            return_col.lightness
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn okhsv_srgb() {
+        let hue_steps = 200;
+        let sat_steps = 200;
+        let val_steps = 200;
+        for hue_step in 0..hue_steps {
+            for sat_step in 0..sat_steps {
+                for val_step in 0..val_steps {
+                    let init_col = OkHsv {
+                        hue: hue_step as f64 * 2.0 * std::f64::consts::PI,
+                        saturation: sat_step as f64 / sat_steps as f64,
+                        value: val_step as f64 / val_steps as f64,
+                    };
+                    let return_col = OkHsv::from(Srgb::from(init_col));
+                    // Comparing with f32 epsilon to allow some leeway
+                    if init_col.hue.abs() > std::f32::EPSILON as f64 {
+                        let error = (init_col.hue - return_col.hue).abs() / init_col.hue.abs();
+                        assert!(
+                            error < ACCEPTABLE_ERROR,
+                            "The hue is too different: input {} -> {} output ({})",
+                            init_col.hue,
+                            return_col.hue,
+                            error
+                        );
+                    } else {
+                        assert!(
+                            return_col.hue.abs() <= std::f32::EPSILON as f64,
+                            "The hue should be negligible, got {} instead",
+                            return_col.hue
+                        );
+                    }
+
+                    if init_col.saturation.abs() > std::f32::EPSILON as f64 {
+                        let error = (init_col.saturation - return_col.saturation).abs()
+                            / init_col.saturation.abs();
+                        assert!(
+                            error < ACCEPTABLE_ERROR,
+                            "The saturation is too different: input {} -> {} output ({})",
+                            init_col.saturation,
+                            return_col.saturation,
+                            error
+                        );
+                    } else {
+                        assert!(
+                            return_col.saturation.abs() <= std::f32::EPSILON as f64,
+                            "The saturation should be negligible, got {} instead",
+                            return_col.saturation
+                        );
+                    }
+
+                    if init_col.value.abs() > std::f32::EPSILON as f64 {
+                        let error =
+                            (init_col.value - return_col.value).abs() / init_col.value.abs();
+                        assert!(
+                            error < ACCEPTABLE_ERROR,
+                            "The value is too different: input {} -> {} output ({})",
+                            init_col.value,
+                            return_col.value,
+                            error
+                        );
+                    } else {
+                        assert!(
+                            return_col.value.abs() <= std::f32::EPSILON as f64,
+                            "The value should be negligible, got {} instead",
+                            return_col.value
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn oklab_srgb() {
+        let light_steps = 200;
+        let a_steps = 200;
+        let b_steps = 200;
+        for light_step in 0..light_steps {
+            for a_step in 0..a_steps {
+                for b_step in 0..b_steps {
+                    let init_col = OkLab {
+                        lightness: light_step as f64 / light_steps as f64,
+                        a: -1.0 + 2.0 * a_step as f64 / a_steps as f64,
+                        b: -1.0 + 2.0 * b_step as f64 / b_steps as f64,
+                    };
+                    let return_col = OkLab::from(LinSrgb::from(init_col));
+                    // Comparing with f32 epsilon to allow some leeway
+                    if init_col.a.abs() > std::f32::EPSILON as f64 {
+                        let error = (init_col.a - return_col.a).abs() / init_col.a.abs();
+                        assert!(
+                            error < ACCEPTABLE_ERROR,
+                            "The a is too different: input {} -> {} output ({})",
+                            init_col.a,
+                            return_col.a,
+                            error
+                        );
+                    } else {
+                        assert!(
+                            return_col.a.abs() <= std::f32::EPSILON as f64,
+                            "The a should be negligible, got {} instead",
+                            return_col.a
+                        );
+                    }
+
+                    if init_col.b.abs() > std::f32::EPSILON as f64 {
+                        let error = (init_col.b - return_col.b).abs() / init_col.b.abs();
+                        assert!(
+                            error < ACCEPTABLE_ERROR,
+                            "The b is too different: input {} -> {} output ({})",
+                            init_col.b,
+                            return_col.b,
+                            error
+                        );
+                    } else {
+                        assert!(
+                            return_col.b.abs() <= std::f32::EPSILON as f64,
+                            "The b should be negligible, got {} instead",
+                            return_col.b
+                        );
+                    }
+
+                    if init_col.lightness.abs() > std::f32::EPSILON as f64 {
+                        let error = (init_col.lightness - return_col.lightness).abs()
+                            / init_col.lightness.abs();
+                        assert!(
+                            error < ACCEPTABLE_ERROR,
+                            "The lightness is too different: input {} -> {} output ({})",
+                            init_col.lightness,
+                            return_col.lightness,
+                            error
+                        );
+                    } else {
+                        assert!(
+                            return_col.lightness.abs() <= std::f32::EPSILON as f64,
+                            "The lightness should be negligible, got {} instead",
+                            return_col.lightness
+                        );
+                    }
+                }
+            }
+        }
+    }
 }

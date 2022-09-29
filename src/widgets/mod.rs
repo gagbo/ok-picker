@@ -12,7 +12,7 @@ use eframe::{
     epaint,
 };
 
-use crate::colors::{OkHsv, Srgb};
+use crate::colors::{OkHsl, OkHsv, Srgb};
 
 /// Number of vertices per dimension in the color sliders.
 /// We need at least 6 for hues, and more for smooth 2D areas.
@@ -22,17 +22,74 @@ const N: u32 = 6 * 6;
 //// Shows a color picker where the user can change the given [`OkHsv`] color.
 ///
 /// Returns `true` on change.
-pub fn color_picker_okhsv_2d(ui: &mut Ui, okhsv: &mut OkHsv) -> bool {
-    let mut new_okhsv = *okhsv;
+pub fn color_picker_okhsv_2d(ui: &mut Ui, current_color: &mut Srgb) -> bool {
+    let mut new_okhsv = OkHsv::from(*current_color);
 
     ui.vertical_centered(|ui| {
         color_picker_okhsv_2d_impl(ui, &mut new_okhsv);
     });
 
-    if *okhsv == new_okhsv {
+    let new_color = Srgb::from(new_okhsv);
+    let sq_distance = (current_color.red - new_color.red).powi(2)
+        + (current_color.green - new_color.green).powi(2)
+        + (current_color.blue - new_color.blue).powi(2);
+    let sq_norm =
+        current_color.red.powi(2) + current_color.green.powi(2) + current_color.blue.powi(2);
+
+    if sq_norm.is_normal() && sq_distance / sq_norm < 0.001 {
         false
     } else {
-        *okhsv = new_okhsv;
+        *current_color = new_color;
+        true
+    }
+}
+
+//// Shows a color picker where the user can change the given [`OkHsv`] color.
+///
+/// Returns `true` on change.
+pub fn color_picker_okhsv_circle(ui: &mut Ui, current_color: &mut Srgb) -> bool {
+    let mut new_okhsv = OkHsv::from(*current_color);
+
+    ui.vertical_centered(|ui| {
+        color_picker_okhsv_circle_impl(ui, &mut new_okhsv);
+    });
+
+    let new_color = Srgb::from(new_okhsv);
+    let sq_distance = (current_color.red - new_color.red).powi(2)
+        + (current_color.green - new_color.green).powi(2)
+        + (current_color.blue - new_color.blue).powi(2);
+    let sq_norm =
+        current_color.red.powi(2) + current_color.green.powi(2) + current_color.blue.powi(2);
+
+    if sq_norm.is_normal() && sq_distance / sq_norm < 0.001 {
+        false
+    } else {
+        *current_color = new_color;
+        true
+    }
+}
+
+//// Shows a color picker where the user can change the given [`OkHsl`] color.
+///
+/// Returns `true` on change.
+pub fn color_picker_okhsl_2d(ui: &mut Ui, current_color: &mut Srgb) -> bool {
+    let mut new_okhsl = OkHsl::from(*current_color);
+
+    ui.vertical_centered(|ui| {
+        color_picker_okhsl_2d_impl(ui, &mut new_okhsl);
+    });
+
+    let new_color = Srgb::from(new_okhsl);
+    let sq_distance = (current_color.red - new_color.red).powi(2)
+        + (current_color.green - new_color.green).powi(2)
+        + (current_color.blue - new_color.blue).powi(2);
+    let sq_norm =
+        current_color.red.powi(2) + current_color.green.powi(2) + current_color.blue.powi(2);
+
+    if sq_norm.is_normal() && sq_distance / sq_norm < 0.001 {
+        false
+    } else {
+        *current_color = new_color;
         true
     }
 }
@@ -79,6 +136,94 @@ fn color_picker_okhsv_2d_impl(ui: &mut Ui, okhsv: &mut OkHsv) {
     if true {
         color_slider_1d(ui, value, 0.0, 1.0, |value| OkHsv { value, ..current })
             .on_hover_text("Value");
+    }
+}
+
+fn color_picker_okhsv_circle_impl(ui: &mut Ui, okhsv: &mut OkHsv) {
+    let current_color_size = vec2(
+        2.0 * ui.spacing().slider_width,
+        2.0 * ui.spacing().interact_size.y,
+    );
+    show_color(ui, *okhsv, current_color_size).on_hover_text("Selected color");
+
+    color_text_ui(ui, *okhsv);
+
+    let current = *okhsv;
+
+    let OkHsv {
+        hue,
+        saturation,
+        value,
+    } = okhsv;
+
+    color_slider_1d(ui, hue, -PI, PI, |hue| OkHsv { hue, ..current }).on_hover_text("Hue");
+
+    color_slider_circle(ui, saturation, hue, |saturation, hue| OkHsv {
+        hue: hue as f64,
+        saturation: saturation as f64,
+        ..current
+    });
+
+    if true {
+        color_slider_1d(ui, value, 0.0, 1.0, |value| OkHsv { value, ..current })
+            .on_hover_text("Value");
+    }
+
+    if true {
+        color_slider_1d(ui, saturation, 0.0, 1.0, |saturation| OkHsv {
+            saturation,
+            ..current
+        })
+        .on_hover_text("Saturation");
+    }
+}
+
+fn color_picker_okhsl_2d_impl(ui: &mut Ui, okhsl: &mut OkHsl) {
+    let current_color_size = vec2(
+        2.0 * ui.spacing().slider_width,
+        2.0 * ui.spacing().interact_size.y,
+    );
+    show_color(ui, *okhsl, current_color_size).on_hover_text("Selected color");
+
+    color_text_ui(ui, *okhsl);
+
+    let current = *okhsl;
+
+    let OkHsl {
+        hue,
+        saturation,
+        lightness,
+    } = okhsl;
+
+    color_slider_1d(ui, hue, -PI, PI, |hue| {
+        OkHsv::from(Srgb::from(OkHsl { hue, ..current }))
+    })
+    .on_hover_text("Hue");
+
+    color_slider_circle(ui, saturation, hue, |saturation, hue| OkHsl {
+        saturation: saturation as f64,
+        hue: hue as f64,
+        ..current
+    });
+
+    if true {
+        color_slider_1d(ui, saturation, 0.0, 1.0, |saturation| {
+            OkHsv::from(Srgb::from(OkHsl {
+                saturation,
+                ..current
+            }))
+        })
+        .on_hover_text("Saturation");
+    }
+
+    if true {
+        color_slider_1d(ui, lightness, 0.0, 1.0, |lightness| {
+            OkHsv::from(Srgb::from(OkHsl {
+                lightness,
+                ..current
+            }))
+        })
+        .on_hover_text("Lightness");
     }
 }
 
@@ -205,12 +350,16 @@ fn color_slider_1d(
     response
 }
 
-fn color_slider_2d(
+fn color_slider_2d<T>(
     ui: &mut Ui,
     x_value: &mut f64,
     y_value: &mut f64,
-    color_at: impl Fn(f64, f64) -> OkHsv,
-) -> Response {
+    color_at: impl Fn(f64, f64) -> T,
+) -> Response
+where
+    T: Into<Color32> + Copy,
+    eframe::egui::Rgba: std::convert::From<T>,
+{
     let desired_size = Vec2::splat(2.0 * ui.spacing().slider_width);
     let (rect, response) = ui.allocate_at_least(desired_size, Sense::click_and_drag());
 
@@ -249,6 +398,85 @@ fn color_slider_2d(
         let x = lerp(rect.left()..=rect.right(), *x_value as f32);
         let y = lerp(rect.bottom()..=rect.top(), *y_value as f32);
         let picked_color = color_at(*x_value, *y_value);
+        ui.painter().add(epaint::CircleShape {
+            center: pos2(x, y),
+            radius: rect.width() / 12.0,
+            fill: picked_color.into(),
+            stroke: Stroke::new(visuals.fg_stroke.width, contrast_color(picked_color)),
+        });
+    }
+
+    response
+}
+
+fn color_slider_circle<T>(
+    ui: &mut Ui,
+    r: &mut f64,
+    angle: &mut f64,
+    color_at: impl Fn(f64, f64) -> T,
+) -> Response
+where
+    T: Into<Color32> + Copy,
+    eframe::egui::Rgba: std::convert::From<T>,
+{
+    let desired_size = Vec2::splat(2.0 * ui.spacing().slider_width);
+    let (rect, response) = ui.allocate_at_least(desired_size, Sense::click_and_drag());
+    let r_max = rect.width().min(rect.height()) / 2.0;
+
+    if let Some(mpos) = response.interact_pointer_pos() {
+        let current_pos = mpos - rect.center();
+        let current_r = current_pos.length();
+        *r = remap_clamp(current_r.into(), 0.0..=r_max.into(), 0.0..=1.0);
+        // y goes down, so we flip the angle to get the
+        // trigonometry normal direction
+        *angle = (-1.0 * current_pos.angle()).into();
+    }
+
+    if ui.is_rect_visible(rect) {
+        let visuals = ui.style().interact(&response);
+        let mut mesh = Mesh::default();
+
+        for ri in 0..=N {
+            for anglei in 0..=N {
+                let rt = ri as f64 / (N as f64);
+                let anglet = 2.0 * std::f64::consts::PI * anglei as f64 / (N as f64);
+                let color = color_at(rt, anglet);
+                let (x_norm, y_norm) = (
+                    (rt * anglet.cos() + 1.0) / 2.0,
+                    (rt * anglet.sin() + 1.0) / 2.0,
+                );
+                let x = lerp(rect.left()..=rect.right(), x_norm as f32);
+                let y = lerp(rect.bottom()..=rect.top(), y_norm as f32);
+                mesh.colored_vertex(pos2(x, y), color.into());
+
+                if ri < N && anglei < N {
+                    let r_offset = 1;
+                    let angle_offset = N + 1;
+                    let tl = anglei * angle_offset + ri;
+                    mesh.add_triangle(tl, tl + r_offset, tl + angle_offset);
+                    mesh.add_triangle(
+                        tl + r_offset,
+                        tl + angle_offset,
+                        tl + angle_offset + r_offset,
+                    );
+                }
+            }
+        }
+        ui.painter().add(Shape::mesh(mesh)); // fill
+
+        ui.painter().rect_stroke(rect, 0.0, visuals.bg_stroke); // outline
+
+        // TODO: Fix the slider position so that it shows correctly
+
+        // Show where the slider is at:
+        // let actual_r = lerp(0.0..=r_max.into(), *r);
+        let (x_norm, y_norm) = (
+            (*r * angle.cos() + 1.0) / 2.0,
+            (*r * angle.sin() + 1.0) / 2.0,
+        );
+        let x = lerp(rect.left()..=rect.right(), x_norm as f32);
+        let y = lerp(rect.bottom()..=rect.top(), y_norm as f32);
+        let picked_color = color_at(*r, *angle);
         ui.painter().add(epaint::CircleShape {
             center: pos2(x, y),
             radius: rect.width() / 12.0,

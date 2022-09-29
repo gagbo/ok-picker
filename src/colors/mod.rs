@@ -6,11 +6,21 @@ use eframe::egui::{Color32, Rgba};
 
 pub mod conversions;
 
-#[derive(Clone, Copy, Debug, Default, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Srgb {
     pub red: f64,
     pub green: f64,
     pub blue: f64,
+}
+
+impl Default for Srgb {
+    fn default() -> Self {
+        Self {
+            red: 0.4,
+            green: 0.4,
+            blue: 0.7,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Default)]
@@ -34,18 +44,38 @@ pub struct OkLCh {
     pub hue: f64,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Default)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct OkHsl {
     pub hue: f64,
     pub saturation: f64,
     pub lightness: f64,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Default)]
+impl Default for OkHsl {
+    fn default() -> Self {
+        Self {
+            hue: Default::default(),
+            saturation: 0.5,
+            lightness: 0.5,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct OkHsv {
     pub hue: f64,
     pub saturation: f64,
     pub value: f64,
+}
+
+impl Default for OkHsv {
+    fn default() -> Self {
+        Self {
+            hue: Default::default(),
+            saturation: 0.5,
+            value: 0.5,
+        }
+    }
 }
 
 impl From<OkHsv> for Color32 {
@@ -62,6 +92,24 @@ impl From<OkHsv> for Color32 {
 impl From<OkHsv> for Rgba {
     fn from(hsv: OkHsv) -> Self {
         let rgb = Srgb::from(hsv);
+        Self::from_rgb(rgb.red as f32, rgb.green as f32, rgb.blue as f32)
+    }
+}
+
+impl From<OkHsl> for Color32 {
+    fn from(hsl: OkHsl) -> Self {
+        let rgb = Srgb::from(hsl);
+        Self::from_rgb(
+            (rgb.red * 256.0).floor() as u8,
+            (rgb.green * 256.0).floor() as u8,
+            (rgb.blue * 256.0).floor() as u8,
+        )
+    }
+}
+
+impl From<OkHsl> for Rgba {
+    fn from(hsl: OkHsl) -> Self {
+        let rgb = Srgb::from(hsl);
         Self::from_rgb(rgb.red as f32, rgb.green as f32, rgb.blue as f32)
     }
 }

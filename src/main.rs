@@ -9,6 +9,8 @@ use eframe::egui::{
 use ok_picker::{colors, widgets};
 
 fn main() {
+    tracing_subscriber::fmt::init();
+
     let win_options = eframe::NativeOptions {
         initial_window_size: Some(Vec2::new(640.0, 480.0)),
         ..Default::default()
@@ -23,7 +25,9 @@ fn main() {
 #[derive(Default)]
 struct OkPicker {
     color: egui::color::Hsva,
-    colour: colors::OkHsv,
+    colour: colors::Srgb,
+    colour_too: colors::Srgb,
+    palette: Vec<colors::Srgb>,
 }
 
 impl OkPicker {
@@ -106,6 +110,16 @@ impl eframe::App for OkPicker {
                     ui.label("OkHSV");
                     ui.spacing_mut().slider_width = 100.0;
                     widgets::color_picker_okhsv_2d(ui, &mut self.colour);
+                });
+
+                ui.add_space(5.0);
+                ui.separator();
+                ui.add_space(5.0);
+
+                ui.vertical_centered(|ui| {
+                    ui.label("OkHSV circle");
+                    ui.spacing_mut().slider_width = 100.0;
+                    widgets::color_picker_okhsv_circle(ui, &mut self.colour_too);
                 });
             });
         });
