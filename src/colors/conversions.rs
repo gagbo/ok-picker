@@ -7,9 +7,8 @@
 //!
 //! Yes, it could be shaders. It could.
 
-// TODO: fix NaN issues when converting very dark colors.
-
 use super::{LinSrgb, OkHsl, OkHsv, OkLCh, OkLab, Srgb};
+use crate::colors::ACCEPTABLE_ERROR;
 
 use once_cell::sync::Lazy;
 
@@ -144,50 +143,87 @@ impl From<OkLCh> for OkLab {
 impl From<LinSrgb> for OkLab {
     fn from(lin: LinSrgb) -> Self {
         use ndarray::Array1;
+
+        debug_assert!(lin.is_normal(), "lin is not normal {lin:?}");
+
         let lin_vec = Array1::<f64>::from(lin);
         let lms = M1_LIN_SRGB_TO_OKLAB.dot(&lin_vec).to_vec();
         let lms_ = ndarray::arr1(&[lms[0].cbrt(), lms[1].cbrt(), lms[2].cbrt()]);
-        (&M2_LIN_SRGB_TO_OKLAB.dot(&lms_)).into()
+
+        let col: Self = (&M2_LIN_SRGB_TO_OKLAB.dot(&lms_)).into();
+        debug_assert!(col.is_normal(), "col is not normal: {col:?}");
+        col
     }
 }
 
 impl From<OkLab> for LinSrgb {
     fn from(lab: OkLab) -> Self {
         use ndarray::Array1;
+
+        debug_assert!(lab.is_normal(), "lab is not normal {lab:?}");
+
         let lab_vec = Array1::<f64>::from(lab);
         let lms_ = M1_OKLAB_TO_LIN_SRGB.dot(&lab_vec).to_vec();
         let lms = ndarray::arr1(&[lms_[0].powi(3), lms_[1].powi(3), lms_[2].powi(3)]);
-        (&M2_OKLAB_TO_LIN_SRGB.dot(&lms)).into()
+
+        let col: Self = (&M2_OKLAB_TO_LIN_SRGB.dot(&lms)).into();
+        debug_assert!(col.is_normal(), "col is not normal: {col:?}");
+        col
     }
 }
 
 impl From<Srgb> for OkHsv {
     fn from(gammad_rgb: Srgb) -> Self {
+        debug_assert!(
+            gammad_rgb.is_normal(),
+            "gammad_rgb isn't normal {gammad_rgb:?}"
+        );
         let lab = OkLab::from(LinSrgb::from(gammad_rgb));
+        debug_assert!(lab.is_normal(), "lab isn't normal {lab:?}");
 
         let chroma = (lab.a.powi(2) + lab.b.powi(2)).sqrt();
-        let a_ = lab.a / chroma;
-        let b_ = lab.b / chroma;
+        let saturated_a = if chroma.is_normal() {
+            lab.a / chroma
+        } else if lab.a == 0.0 && lab.b == 0.0 {
+            // Artificially move to a forced chroma if we received 0.0
+            1.0
+        } else {
+            lab.a
+        };
+        let saturated_b = if chroma.is_normal() {
+            lab.b / chroma
+        } else {
+            lab.b
+        };
 
-        let hue = lab.b.atan2(lab.a);
-        let cusp = find_cusp(a_, b_);
+        let hue = saturated_b.atan2(saturated_a);
+        let cusp = find_cusp(saturated_a, saturated_b);
         let st_max = ST::from_cusp(cusp);
 
         const S0: f64 = 0.5;
         let k = 1.0 - S0 / st_max.s;
 
         // first we find L_v, C_v, L_vt and C_vt
-        let t = st_max.t / (chroma + lab.lightness * st_max.t);
+        let t = if st_max.t.is_finite() && chroma.is_normal() {
+            st_max.t / (chroma + lab.lightness * st_max.t)
+        } else {
+            0.0
+        };
+        debug_assert!(t.is_finite(), "t is not normal {t:?}");
         let l_v = t * lab.lightness;
         let c_v = t * chroma;
 
         let l_vt = inverse_toe(l_v);
-        let c_vt = c_v * l_vt / l_v;
+        let c_vt = if l_v.is_normal() {
+            c_v * l_vt / l_v
+        } else {
+            c_v
+        };
 
         let rgb_scale = LinSrgb::from(OkLab {
             lightness: l_vt,
-            a: a_ * c_vt,
-            b: b_ * c_vt,
+            a: saturated_a * c_vt,
+            b: saturated_b * c_vt,
         });
         let scale_l = (1.0
             / f64::max(
@@ -207,13 +243,15 @@ impl From<Srgb> for OkHsv {
         Self {
             hue,
             saturation: (S0 + st_max.t) * c_v / ((st_max.t * S0) + st_max.t * k * c_v),
-            value: l / l_v,
+            value: if l_v == 0.0 { 0.0 } else { l / l_v },
         }
     }
 }
 
 impl From<OkHsv> for Srgb {
     fn from(hsv: OkHsv) -> Self {
+        debug_assert!(hsv.is_normal(), "hsv isn't normal {hsv:?}");
+
         let a_ = (hsv.hue).cos();
         let b_ = (hsv.hue).sin();
         let cusp = find_cusp(a_, b_);
@@ -221,11 +259,13 @@ impl From<OkHsv> for Srgb {
 
         const S0: f64 = 0.5;
         let k = 1.0 - S0 / st_max.s;
+        debug_assert!(k.is_finite(), "k is not normal {k:?}");
 
         // first we compute L and V as if the gamut is a perfect triangle:
 
         // L, C when v==1:
         let l_v = 1.0 - hsv.saturation * S0 / (S0 + st_max.t - st_max.t * k * hsv.saturation);
+        debug_assert!(l_v.is_finite(), "l_v is not normal {l_v:?}");
         let c_v = hsv.saturation * st_max.t * S0 / (S0 + st_max.t - st_max.t * k * hsv.saturation);
 
         let l = hsv.value * l_v;
@@ -233,10 +273,16 @@ impl From<OkHsv> for Srgb {
 
         // then we compensate for both toe and the curved top part of the triangle:
         let l_vt = inverse_toe(l_v);
-        let c_vt = c_v * l_vt / l_v;
+        debug_assert!(l_vt.is_finite(), "l_vt is not normal {l_vt:?}");
+        let c_vt = if l_v.is_normal() {
+            c_v * l_vt / l_v
+        } else {
+            c_v
+        };
 
         let l_new = inverse_toe(l);
-        let c = c * l_new / l;
+        debug_assert!(l_new.is_finite(), "l_new is not normal {l_new:?}");
+        let c = if l.is_normal() { c * l_new / l } else { c };
         let l = l_new;
 
         let rgb_scale = LinSrgb::from(OkLab {
@@ -244,21 +290,31 @@ impl From<OkHsv> for Srgb {
             a: a_ * c_vt,
             b: b_ * c_vt,
         });
+        debug_assert!(
+            rgb_scale.is_normal(),
+            "rgb_scale is not normal {rgb_scale:?}"
+        );
         let scale_l = (1.0
             / f64::max(
                 f64::max(rgb_scale.red, rgb_scale.green),
-                f64::max(rgb_scale.blue, 0.0),
+                f64::max(rgb_scale.blue, std::f64::MIN_POSITIVE),
             ))
         .cbrt();
+        debug_assert!(scale_l.is_finite(), "scale_l is not normal {scale_l:?}");
         let l = l * scale_l;
         let c = c * scale_l;
 
-        LinSrgb::from(OkLab {
+        let resulting_lab = OkLab {
             lightness: l,
             a: c * a_,
             b: c * b_,
-        })
-        .into()
+        };
+        debug_assert!(
+            resulting_lab.is_normal(),
+            "resulting_lab is not normal {resulting_lab:?}"
+        );
+
+        LinSrgb::from(resulting_lab).into()
     }
 }
 
@@ -317,10 +373,18 @@ impl From<Srgb> for OkHsl {
         let lab = OkLab::from(LinSrgb::from(rgb));
 
         let c = (lab.a.powi(2) + lab.b.powi(2)).sqrt();
-        let a_ = lab.a / c;
-        let b_ = lab.b / c;
+        let a_ = if c > std::f64::EPSILON {
+            lab.a / c
+        } else {
+            1.0
+        };
+        let b_ = if c > std::f64::EPSILON {
+            lab.b / c
+        } else {
+            0.0
+        };
         let lightness = lab.lightness;
-        let hue = lab.b.atan2(lab.a);
+        let hue = b_.atan2(a_);
 
         let Cs { c_0, c_mid, c_max } = Cs::from(OkLab {
             lightness,
@@ -331,15 +395,27 @@ impl From<Srgb> for OkHsl {
         let mid = 0.8;
         let mid_inv = 1.25_f64;
 
-        let saturation = if c < c_mid {
+        let saturation = if c_0 == 0.0 && c_max == 0.0 {
+            0.0
+        } else if c < c_mid {
             let k_1 = mid * c_0;
             let k_2 = 1.0 - k_1 / c_mid;
+            debug_assert!(k_1.is_finite(), "k1 is not normal {k_1:?}");
+            debug_assert!(k_2.is_finite(), "k2 is not normal {k_2:?}");
+            debug_assert!(c_mid.is_normal(), "c_mid is not normal {c_mid:?}");
+            debug_assert!(c_0.is_normal(), "c_0 is not normal {c_0:?}");
 
             mid * c / (k_1 + k_2 * c)
         } else {
             let k_0 = c_mid;
             let k_1 = (1.0 - mid) * c_mid.powi(2) * mid_inv.powi(2) / c_0;
             let k_2 = 1.0 - k_1 / (c_max - c_mid);
+            debug_assert!(k_0.is_finite(), "k0 is not normal {k_0:?}");
+            debug_assert!(k_1.is_finite(), "k1 is not normal {k_1:?}");
+            debug_assert!(k_2.is_finite(), "k2 is not normal {k_2:?}");
+            debug_assert!(c_mid.is_normal(), "c_mid is not normal {c_mid:?}");
+            debug_assert!(c_max.is_normal(), "c_max is not normal {c_max:?}");
+            debug_assert!(c_0.is_normal(), "c_0 is not normal {c_0:?}");
 
             mid + (1.0 - mid) * (c - k_0) / (k_1 + k_2 * (c - k_0))
         };
@@ -371,9 +447,12 @@ struct ST {
 
 impl ST {
     fn from_cusp(cusp: LC) -> Self {
+        let l = cusp.lightness;
+        debug_assert!(l.is_normal(), "l is {l:?}");
+        debug_assert!((1.0 - l).is_normal(), "l is {l:?}");
         Self {
-            s: cusp.chroma / cusp.lightness,
-            t: cusp.chroma / (1.0 - cusp.lightness),
+            s: cusp.chroma / l,
+            t: cusp.chroma / (1.0 - l),
         }
     }
 
@@ -420,6 +499,11 @@ fn inverse_toe(val: f64) -> f64 {
 }
 
 fn find_cusp(a: f64, b: f64) -> LC {
+    debug_assert!(
+        (1.0 - a.powi(2) - b.powi(2)).abs() < ACCEPTABLE_ERROR,
+        "Precondition failed: ({a:?}, {b:?}) isn't on unit circle (norm is {})",
+        a.powi(2) + b.powi(2)
+    );
     let s_cusp = compute_max_saturation(a, b);
 
     let max_rgb = LinSrgb::from(OkLab {
@@ -427,6 +511,7 @@ fn find_cusp(a: f64, b: f64) -> LC {
         a: s_cusp * a,
         b: s_cusp * b,
     });
+    debug_assert!(max_rgb.is_normal(), "max_rgb is not normal: {max_rgb:?}");
     let lightness = (1.0 / f64::max(max_rgb.red, f64::max(max_rgb.green, max_rgb.blue))).cbrt();
     LC {
         lightness,
@@ -438,6 +523,11 @@ fn find_cusp(a: f64, b: f64) -> LC {
 /// Saturation here is defined as S = C/L
 /// a and b must be normalized so a^2 + b^2 == 1
 fn compute_max_saturation(a: f64, b: f64) -> f64 {
+    debug_assert!(
+        (1.0 - a.powi(2) - b.powi(2)).abs() < ACCEPTABLE_ERROR,
+        "Precondition failed: ({a:?}, {b:?}) isn't on unit circle (norm is {})",
+        a.powi(2) + b.powi(2)
+    );
     // Max saturation will be when one of r, g or b goes below zero.
 
     // Select different coefficients depending on which component goes below zero first
@@ -480,34 +570,39 @@ fn compute_max_saturation(a: f64, b: f64) -> f64 {
     };
 
     // Approximate max saturation using a polynomial:
-    let s = k0 + k1 * a + k2 * b + k3 * a * a + k4 * a * b;
+    let mut sat = k0 + k1 * a + k2 * b + k3 * a * a + k4 * a * b;
 
     // Do one step Halley's method to get closer
     // this gives an error less than 10e6, except for some blue hues where the dS/dh is close to infinite
     // this should be sufficient for most applications, otherwise do two/three steps
-    let (k_l, k_m, k_s) = (
-        M1_OKLAB_TO_LIN_SRGB[[0, 1]] * a + M1_OKLAB_TO_LIN_SRGB[[0, 2]] * b,
-        M1_OKLAB_TO_LIN_SRGB[[1, 1]] * a + M1_OKLAB_TO_LIN_SRGB[[1, 2]] * b,
-        M1_OKLAB_TO_LIN_SRGB[[2, 1]] * a + M1_OKLAB_TO_LIN_SRGB[[2, 2]] * b,
-    );
+    for _ in 0..4 {
+        let (k_l, k_m, k_s) = (
+            M1_OKLAB_TO_LIN_SRGB[[0, 1]] * a + M1_OKLAB_TO_LIN_SRGB[[0, 2]] * b,
+            M1_OKLAB_TO_LIN_SRGB[[1, 1]] * a + M1_OKLAB_TO_LIN_SRGB[[1, 2]] * b,
+            M1_OKLAB_TO_LIN_SRGB[[2, 1]] * a + M1_OKLAB_TO_LIN_SRGB[[2, 2]] * b,
+        );
 
-    let (l_, m_, s_) = (1.0 + s * k_l, 1.0 + s * k_m, 1.0 + s * k_s);
-    let (l, m, s) = (l_.powi(3), m_.powi(3), s_.powi(3));
-    let (l_ds, m_ds, s_ds) = (
-        3.0 * k_l * l_ * l_,
-        3.0 * k_m * m_ * m_,
-        3.0 * k_s * s_ * s_,
-    );
-    let (l_ds2, m_ds2, s_ds2) = (
-        6.0 * k_l * k_l * l_,
-        6.0 * k_m * k_m * m_,
-        6.0 * k_s * k_s * s_,
-    );
-    let f = wl * l + wm * m + ws * s;
-    let f1 = wl * l_ds + wm * m_ds + ws * s_ds;
-    let f2 = wl * l_ds2 + wm * m_ds2 + ws * s_ds2;
+        let (l_, m_, s_) = (1.0 + sat * k_l, 1.0 + sat * k_m, 1.0 + sat * k_s);
+        let (l, m, s) = (l_.powi(3), m_.powi(3), s_.powi(3));
+        let (l_ds, m_ds, s_ds) = (
+            3.0 * k_l * l_ * l_,
+            3.0 * k_m * m_ * m_,
+            3.0 * k_s * s_ * s_,
+        );
+        let (l_ds2, m_ds2, s_ds2) = (
+            6.0 * k_l * k_l * l_,
+            6.0 * k_m * k_m * m_,
+            6.0 * k_s * k_s * s_,
+        );
+        let f = wl * l + wm * m + ws * s;
+        let f1 = wl * l_ds + wm * m_ds + ws * s_ds;
+        let f2 = wl * l_ds2 + wm * m_ds2 + ws * s_ds2;
 
-    s - f * f1 / (f1 * f1 - 0.5 * f * f2)
+        sat -= f * f1 / (f1 * f1 - 0.5 * f * f2);
+    }
+
+    debug_assert!(sat.is_finite(), "Maximum saturation is not correct {sat:?}");
+    sat
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -519,22 +614,47 @@ struct Cs {
 
 impl From<OkLab> for Cs {
     fn from(lab: OkLab) -> Self {
+        debug_assert!(lab.is_normal(), "lab isn't normal: {lab:?}");
         let cusp = find_cusp(lab.a, lab.b);
         let c_max = find_gamut_intersection(lab.a, lab.b, lab.lightness, 1.0, lab.lightness, cusp);
         let st_max = ST::from_cusp(cusp);
-        let k = c_max / (lab.lightness * st_max.s).min((1.0 - lab.lightness) * st_max.t);
+        let k = c_max
+            / (lab.lightness * st_max.s)
+                .min((1.0 - lab.lightness) * st_max.t)
+                .max(std::f64::MIN_POSITIVE);
+        debug_assert!(k.is_finite(), "k is not normal: {k:?}");
         let st_mid = ST::mid(lab.a, lab.b);
+
+        debug_assert!(
+            st_mid.s.is_normal() && st_mid.t.is_normal(),
+            "st_mid is not normal: {st_mid:?}"
+        );
+        debug_assert!(
+            st_max.s.is_normal() && st_max.t.is_normal(),
+            "st_max is not normal: {st_max:?}"
+        );
 
         // Use a soft minimum function, instead of a sharp triangle shape to get a smooth value for chroma.
         let c_a = lab.lightness * st_mid.s;
         let c_b = (1.0 - lab.lightness) * st_mid.t;
-        let c_mid = 0.9 * k * (c_a.powi(-4) + c_b.powi(-4)).powi(-1).sqrt().sqrt();
+        let c_mid = if !(c_a.is_normal() && c_b.is_normal()) {
+            0.0
+        } else {
+            0.9 * k * (c_a.powi(-4) + c_b.powi(-4)).powi(-1).sqrt().sqrt()
+        };
 
         // for C_0, the shape is independent of hue, so ST are constant. Values picked to roughly be the average values of ST.
         let c_a = lab.lightness * 0.4;
         let c_b = (1.0 - lab.lightness) * 0.8;
-        let c_0 = (c_a.powi(-2) + c_b.powi(-2)).powi(-1).sqrt();
+        let c_0 = if !(c_a.is_normal() && c_b.is_normal()) {
+            0.0
+        } else {
+            (c_a.powi(-2) + c_b.powi(-2)).powi(-1).sqrt()
+        };
 
+        debug_assert!(c_0.is_finite(), "c_0 is not normal: {c_0:?}");
+        debug_assert!(c_mid.is_finite(), "c_mid is not normal: {c_mid:?}");
+        debug_assert!(c_max.is_finite(), "c_max is not normal: {c_max:?}");
         Self { c_0, c_mid, c_max }
     }
 }
@@ -567,7 +687,7 @@ fn find_gamut_intersection(a: f64, b: f64, l1: f64, c1: f64, l0: f64, cusp: LC) 
         let s_dt = d_l + d_c * k_s;
 
         // If higher accuracy is required, 2 or 3 iterations of the following block can be used:
-        {
+        for _ in 0..4 {
             let l = l0 * (1.0 - target) + target * l1;
             let c = target * c1;
 
@@ -599,11 +719,7 @@ fn find_gamut_intersection(a: f64, b: f64, l1: f64, c1: f64, l0: f64, cusp: LC) 
                 + M2_OKLAB_TO_LIN_SRGB[[0, 2]] * sdt2;
 
             let u_r = r1 / (r1 * r1 - 0.5 * r * r2);
-            let t_r = if u_r.is_sign_positive() {
-                Some(-r * u_r)
-            } else {
-                None
-            };
+            let t_r = if u_r > 0.0 { Some(-r * u_r) } else { None };
 
             let g = M2_OKLAB_TO_LIN_SRGB[[1, 0]] * l_c
                 + M2_OKLAB_TO_LIN_SRGB[[1, 1]] * m_c
@@ -617,11 +733,7 @@ fn find_gamut_intersection(a: f64, b: f64, l1: f64, c1: f64, l0: f64, cusp: LC) 
                 + M2_OKLAB_TO_LIN_SRGB[[1, 2]] * sdt2;
 
             let u_g = g1 / (g1 * g1 - 0.5 * g * g2);
-            let t_g = if u_g.is_sign_positive() {
-                Some(-g * u_g)
-            } else {
-                None
-            };
+            let t_g = if u_g > 0.0 { Some(-g * u_g) } else { None };
 
             let b = M2_OKLAB_TO_LIN_SRGB[[2, 0]] * l_c
                 + M2_OKLAB_TO_LIN_SRGB[[2, 1]] * m_c
@@ -635,11 +747,7 @@ fn find_gamut_intersection(a: f64, b: f64, l1: f64, c1: f64, l0: f64, cusp: LC) 
                 + M2_OKLAB_TO_LIN_SRGB[[2, 2]] * sdt2;
 
             let u_b = b1 / (b1 * b1 - 0.5 * b * b2);
-            let t_b = if u_b.is_sign_positive() {
-                Some(-b * u_b)
-            } else {
-                None
-            };
+            let t_b = if u_b > 0.0 { Some(-b * u_b) } else { None };
 
             target += [t_r, t_g, t_b]
                 .into_iter()
@@ -654,12 +762,12 @@ fn find_gamut_intersection(a: f64, b: f64, l1: f64, c1: f64, l0: f64, cusp: LC) 
 
 #[cfg(test)]
 mod tests {
-    use super::*;
 
-    const ACCEPTABLE_ERROR: f64 = 0.00001;
+    use super::*;
 
     #[test]
     fn okhsl_srgb() {
+        todo!("Rewrite the test as sRGB -> Other -> sRGB instead.");
         let hue_steps = 200;
         let sat_steps = 200;
         let light_steps = 200;
@@ -672,21 +780,22 @@ mod tests {
                         lightness: light_step as f64 / light_steps as f64,
                     };
                     let return_col = OkHsl::from(Srgb::from(init_col));
+                    assert!(
+                        return_col.is_normal(),
+                        "return_col is not normal\n{init_col:?} became\n{return_col:?}"
+                    );
                     // Comparing with f32 epsilon to allow some leeway
                     if init_col.hue.abs() > std::f32::EPSILON as f64 {
                         let error = (init_col.hue - return_col.hue).abs() / init_col.hue.abs();
                         assert!(
                             error < ACCEPTABLE_ERROR,
-                            "The hue is too different: input {} -> {} output ({})",
-                            init_col.hue,
-                            return_col.hue,
-                            error
+                            "The hue is too different: \n\tInit {init_col:?}\n\tBack {return_col:?}\n\tError: {}%",
+                            error * 100.0
                         );
-                    } else {
+                    } else if init_col.saturation.abs() >= std::f64::MIN_POSITIVE {
                         assert!(
                             return_col.hue.abs() <= std::f32::EPSILON as f64,
-                            "The hue should be negligible, got {} instead",
-                            return_col.hue
+                            "The hue should be negligible from\n\t{init_col:?}, got\n\t{return_col:?} instead",
                         );
                     }
 
@@ -695,16 +804,13 @@ mod tests {
                             / init_col.saturation.abs();
                         assert!(
                             error < ACCEPTABLE_ERROR,
-                            "The saturation is too different: input {} -> {} output ({})",
-                            init_col.saturation,
-                            return_col.saturation,
-                            error
+                            "The saturation is too different: \n\tInit {init_col:?}\n\tBack {return_col:?}\n\tError: {}%",
+                            error * 100.0
                         );
                     } else {
                         assert!(
                             return_col.saturation.abs() <= std::f32::EPSILON as f64,
-                            "The saturation should be negligible, got {} instead",
-                            return_col.saturation
+                            "The saturation should be negligible from\n\t{init_col:?}, got\n\t{return_col:?} instead",
                         );
                     }
 
@@ -713,16 +819,13 @@ mod tests {
                             / init_col.lightness.abs();
                         assert!(
                             error < ACCEPTABLE_ERROR,
-                            "The lightness is too different: input {} -> {} output ({})",
-                            init_col.lightness,
-                            return_col.lightness,
-                            error
+                            "The lightness is too different: \n\tInit {init_col:?}\n\tBack {return_col:?}\n\tError: {}%",
+                            error * 100.0
                         );
                     } else {
                         assert!(
                             return_col.lightness.abs() <= std::f32::EPSILON as f64,
-                            "The lightness should be negligible, got {} instead",
-                            return_col.lightness
+                            "The lightness should be negligible from\n\t{init_col:?}, got\n\t{return_col:?} instead",
                         );
                     }
                 }
@@ -732,6 +835,7 @@ mod tests {
 
     #[test]
     fn okhsv_srgb() {
+        todo!("Rewrite the test as sRGB -> Other -> sRGB instead.");
         let hue_steps = 200;
         let sat_steps = 200;
         let val_steps = 200;
@@ -744,21 +848,22 @@ mod tests {
                         value: val_step as f64 / val_steps as f64,
                     };
                     let return_col = OkHsv::from(Srgb::from(init_col));
+                    assert!(
+                        return_col.is_normal(),
+                        "return_col is not normal\n{init_col:?} became\n{return_col:?}"
+                    );
                     // Comparing with f32 epsilon to allow some leeway
                     if init_col.hue.abs() > std::f32::EPSILON as f64 {
                         let error = (init_col.hue - return_col.hue).abs() / init_col.hue.abs();
                         assert!(
                             error < ACCEPTABLE_ERROR,
-                            "The hue is too different: input {} -> {} output ({})",
-                            init_col.hue,
-                            return_col.hue,
-                            error
+                            "The hue is too different: \n\tInit {init_col:?}\n\tBack {return_col:?}\n\tError: {}%",
+                            error * 100.0
                         );
-                    } else {
+                    } else if init_col.saturation.abs() >= std::f64::MIN_POSITIVE {
                         assert!(
                             return_col.hue.abs() <= std::f32::EPSILON as f64,
-                            "The hue should be negligible, got {} instead",
-                            return_col.hue
+                            "The hue should be negligible from\n\t{init_col:?}, got\n\t{return_col:?} instead",
                         );
                     }
 
@@ -767,16 +872,13 @@ mod tests {
                             / init_col.saturation.abs();
                         assert!(
                             error < ACCEPTABLE_ERROR,
-                            "The saturation is too different: input {} -> {} output ({})",
-                            init_col.saturation,
-                            return_col.saturation,
-                            error
+                            "The saturation is too different: \n\tInit {init_col:?}\n\tBack {return_col:?}\n\tError: {}%",
+                            error * 100.0
                         );
                     } else {
                         assert!(
                             return_col.saturation.abs() <= std::f32::EPSILON as f64,
-                            "The saturation should be negligible, got {} instead",
-                            return_col.saturation
+                            "The saturation should be negligible from\n\t{init_col:?}, got\n\t{return_col:?} instead",
                         );
                     }
 
@@ -785,16 +887,13 @@ mod tests {
                             (init_col.value - return_col.value).abs() / init_col.value.abs();
                         assert!(
                             error < ACCEPTABLE_ERROR,
-                            "The value is too different: input {} -> {} output ({})",
-                            init_col.value,
-                            return_col.value,
-                            error
+                            "The value is too different: \n\tInit {init_col:?}\n\tBack {return_col:?}\n\tError: {}%",
+                            error * 100.0
                         );
                     } else {
                         assert!(
                             return_col.value.abs() <= std::f32::EPSILON as f64,
-                            "The value should be negligible, got {} instead",
-                            return_col.value
+                            "The value should be negligible from\n\t{init_col:?}, got\n\t{return_col:?} instead",
                         );
                     }
                 }
@@ -804,6 +903,7 @@ mod tests {
 
     #[test]
     fn oklab_srgb() {
+        todo!("Rewrite the test as sRGB -> Other -> sRGB instead.");
         let light_steps = 200;
         let a_steps = 200;
         let b_steps = 200;
@@ -816,21 +916,22 @@ mod tests {
                         b: -1.0 + 2.0 * b_step as f64 / b_steps as f64,
                     };
                     let return_col = OkLab::from(LinSrgb::from(init_col));
+                    assert!(
+                        return_col.is_normal(),
+                        "return_col is not normal\n{init_col:?} became\n{return_col:?}"
+                    );
                     // Comparing with f32 epsilon to allow some leeway
                     if init_col.a.abs() > std::f32::EPSILON as f64 {
                         let error = (init_col.a - return_col.a).abs() / init_col.a.abs();
                         assert!(
                             error < ACCEPTABLE_ERROR,
-                            "The a is too different: input {} -> {} output ({})",
-                            init_col.a,
-                            return_col.a,
-                            error
+                            "The a is too different: \n\tInit {init_col:?}\n\tBack {return_col:?}\n\tError: {}%",
+                            error * 100.0
                         );
                     } else {
                         assert!(
                             return_col.a.abs() <= std::f32::EPSILON as f64,
-                            "The a should be negligible, got {} instead",
-                            return_col.a
+                            "The a should be negligible from\n\t{init_col:?}, got\n\t{return_col:?} instead",
                         );
                     }
 
@@ -838,16 +939,13 @@ mod tests {
                         let error = (init_col.b - return_col.b).abs() / init_col.b.abs();
                         assert!(
                             error < ACCEPTABLE_ERROR,
-                            "The b is too different: input {} -> {} output ({})",
-                            init_col.b,
-                            return_col.b,
-                            error
+                            "The b is too different: \n\tInit {init_col:?}\n\tBack {return_col:?}\n\tError: {}%",
+                            error * 100.0
                         );
                     } else {
                         assert!(
                             return_col.b.abs() <= std::f32::EPSILON as f64,
-                            "The b should be negligible, got {} instead",
-                            return_col.b
+                            "The b should be negligible from\n\t{init_col:?}, got\n\t{return_col:?} instead",
                         );
                     }
 
@@ -856,16 +954,13 @@ mod tests {
                             / init_col.lightness.abs();
                         assert!(
                             error < ACCEPTABLE_ERROR,
-                            "The lightness is too different: input {} -> {} output ({})",
-                            init_col.lightness,
-                            return_col.lightness,
-                            error
+                            "The lightness is too different: \n\tInit {init_col:?}\n\tBack {return_col:?}\n\tError: {}%",
+                            error * 100.0
                         );
                     } else {
                         assert!(
                             return_col.lightness.abs() <= std::f32::EPSILON as f64,
-                            "The lightness should be negligible, got {} instead",
-                            return_col.lightness
+                            "The lightness should be negligible from\n\t{init_col:?}, got\n\t{return_col:?} instead",
                         );
                     }
                 }

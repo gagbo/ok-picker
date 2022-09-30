@@ -6,11 +6,19 @@ use eframe::egui::{Color32, Rgba};
 
 pub mod conversions;
 
+const ACCEPTABLE_ERROR: f64 = 0.000001;
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Srgb {
     pub red: f64,
     pub green: f64,
     pub blue: f64,
+}
+
+impl Srgb {
+    fn is_normal(&self) -> bool {
+        self.red.is_finite() && self.green.is_finite() && self.blue.is_finite()
+    }
 }
 
 impl Default for Srgb {
@@ -30,11 +38,37 @@ pub struct LinSrgb {
     pub blue: f64,
 }
 
+impl LinSrgb {
+    fn is_normal(&self) -> bool {
+        self.red.is_finite() && self.green.is_finite() && self.blue.is_finite()
+    }
+
+    /// Helper to fix numeric noise
+    pub fn clamp(&mut self) {
+        self.red = self.red.clamp(0.0, 1.0);
+        self.green = self.green.clamp(0.0, 1.0);
+        self.blue = self.blue.clamp(0.0, 1.0);
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Default)]
 pub struct OkLab {
     pub lightness: f64,
     pub a: f64,
     pub b: f64,
+}
+
+impl OkLab {
+    fn is_normal(&self) -> bool {
+        self.lightness.is_finite() && self.a.is_finite() && self.b.is_finite()
+    }
+
+    /// Helper to fix numeric noise
+    pub fn clamp(&mut self) {
+        self.a = self.a.clamp(-1.0, 1.0);
+        self.b = self.b.clamp(-1.0, 1.0);
+        self.lightness = self.lightness.clamp(0.0, 1.0);
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Default)]
@@ -44,6 +78,11 @@ pub struct OkLCh {
     pub hue: f64,
 }
 
+impl OkLCh {
+    fn is_normal(&self) -> bool {
+        self.lightness.is_finite() && self.chroma.is_finite() && self.hue.is_finite()
+    }
+}
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct OkHsl {
     pub hue: f64,
@@ -51,6 +90,11 @@ pub struct OkHsl {
     pub lightness: f64,
 }
 
+impl OkHsl {
+    fn is_normal(&self) -> bool {
+        self.lightness.is_finite() && self.saturation.is_finite() && self.hue.is_finite()
+    }
+}
 impl Default for OkHsl {
     fn default() -> Self {
         Self {
@@ -66,6 +110,12 @@ pub struct OkHsv {
     pub hue: f64,
     pub saturation: f64,
     pub value: f64,
+}
+
+impl OkHsv {
+    fn is_normal(&self) -> bool {
+        self.value.is_finite() && self.saturation.is_finite() && self.hue.is_finite()
+    }
 }
 
 impl Default for OkHsv {
