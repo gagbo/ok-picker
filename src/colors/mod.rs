@@ -6,7 +6,12 @@ use eframe::egui::{Color32, Rgba};
 
 pub mod conversions;
 
-const ACCEPTABLE_ERROR: f64 = 0.000001;
+/// The controlling factor for accepting numerical errors in debug builds
+/// preconditions/assertions, and in tests.
+///
+/// This is the expected precision of the computations, mostly that we bound
+/// relative errors to `(100.0 * ACCEPTABLE_ERROR)%`
+const ACCEPTABLE_ERROR: f64 = 0.0001;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Srgb {
@@ -43,7 +48,10 @@ impl LinSrgb {
         self.red.is_finite() && self.green.is_finite() && self.blue.is_finite()
     }
 
-    /// Helper to fix numeric noise
+    /// Gamma clipping through dumb clamping.
+    ///
+    /// This method should only be used for colors _really_ close to be in
+    /// gamut, e.g. to fix numerical noise after conversion cycles.
     pub fn clamp(&mut self) {
         self.red = self.red.clamp(0.0, 1.0);
         self.green = self.green.clamp(0.0, 1.0);
@@ -63,7 +71,10 @@ impl OkLab {
         self.lightness.is_finite() && self.a.is_finite() && self.b.is_finite()
     }
 
-    /// Helper to fix numeric noise
+    /// Gamma clipping through dumb clamping.
+    ///
+    /// This method should only be used for colors _really_ close to be in
+    /// gamut, e.g. to fix numerical noise after conversion cycles.
     pub fn clamp(&mut self) {
         self.a = self.a.clamp(-1.0, 1.0);
         self.b = self.b.clamp(-1.0, 1.0);

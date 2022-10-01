@@ -767,65 +767,84 @@ mod tests {
 
     #[test]
     fn okhsl_srgb() {
-        todo!("Rewrite the test as sRGB -> Other -> sRGB instead.");
-        let hue_steps = 200;
-        let sat_steps = 200;
-        let light_steps = 200;
-        for hue_step in 0..hue_steps {
-            for sat_step in 0..sat_steps {
-                for light_step in 0..light_steps {
-                    let init_col = OkHsl {
-                        hue: hue_step as f64 * 2.0 * std::f64::consts::PI,
-                        saturation: sat_step as f64 / sat_steps as f64,
-                        lightness: light_step as f64 / light_steps as f64,
+        let red_steps = 18;
+        let green_steps = 18;
+        let blue_steps = 18;
+        for red_step in 0..red_steps {
+            for green_step in 0..green_steps {
+                for blue_step in 0..blue_steps {
+                    let init_col = Srgb {
+                        red: red_step as f64 / red_steps as f64,
+                        green: green_step as f64 / green_steps as f64,
+                        blue: blue_step as f64 / blue_steps as f64,
                     };
-                    let return_col = OkHsl::from(Srgb::from(init_col));
+                    let return_col = Srgb::from(OkHsl::from(init_col));
                     assert!(
                         return_col.is_normal(),
                         "return_col is not normal\n{init_col:?} became\n{return_col:?}"
                     );
                     // Comparing with f32 epsilon to allow some leeway
-                    if init_col.hue.abs() > std::f32::EPSILON as f64 {
-                        let error = (init_col.hue - return_col.hue).abs() / init_col.hue.abs();
+                    if init_col.red.abs() > std::f32::EPSILON as f64 {
+                        let error = (init_col.red - return_col.red).abs() / init_col.red.abs();
                         assert!(
                             error < ACCEPTABLE_ERROR,
-                            "The hue is too different: \n\tInit {init_col:?}\n\tBack {return_col:?}\n\tError: {}%",
-                            error * 100.0
-                        );
-                    } else if init_col.saturation.abs() >= std::f64::MIN_POSITIVE {
-                        assert!(
-                            return_col.hue.abs() <= std::f32::EPSILON as f64,
-                            "The hue should be negligible from\n\t{init_col:?}, got\n\t{return_col:?} instead",
-                        );
-                    }
-
-                    if init_col.saturation.abs() > std::f32::EPSILON as f64 {
-                        let error = (init_col.saturation - return_col.saturation).abs()
-                            / init_col.saturation.abs();
-                        assert!(
-                            error < ACCEPTABLE_ERROR,
-                            "The saturation is too different: \n\tInit {init_col:?}\n\tBack {return_col:?}\n\tError: {}%",
+                            "The red is too different: \n\tInit {init_col:?}\n\tBack {return_col:?}\n\tError: {}%",
                             error * 100.0
                         );
                     } else {
+                        let ratio = (return_col.red
+                            / init_col
+                                .red
+                                .max(init_col.green)
+                                .max(init_col.blue)
+                                .max(std::f32::EPSILON as f64))
+                        .abs();
                         assert!(
-                            return_col.saturation.abs() <= std::f32::EPSILON as f64,
-                            "The saturation should be negligible from\n\t{init_col:?}, got\n\t{return_col:?} instead",
+                            ratio <= ACCEPTABLE_ERROR,
+                            "The red should be negligible from\n\t{init_col:?}, got\n\t{return_col:?} instead",
                         );
                     }
 
-                    if init_col.lightness.abs() > std::f32::EPSILON as f64 {
-                        let error = (init_col.lightness - return_col.lightness).abs()
-                            / init_col.lightness.abs();
+                    if init_col.green.abs() > std::f32::EPSILON as f64 {
+                        let error =
+                            (init_col.green - return_col.green).abs() / init_col.green.abs();
                         assert!(
                             error < ACCEPTABLE_ERROR,
-                            "The lightness is too different: \n\tInit {init_col:?}\n\tBack {return_col:?}\n\tError: {}%",
+                            "The green is too different: \n\tInit {init_col:?}\n\tBack {return_col:?}\n\tError: {}%",
                             error * 100.0
                         );
                     } else {
+                        let ratio = (return_col.green
+                            / init_col
+                                .red
+                                .max(init_col.green)
+                                .max(init_col.blue)
+                                .max(std::f32::EPSILON as f64))
+                        .abs();
                         assert!(
-                            return_col.lightness.abs() <= std::f32::EPSILON as f64,
-                            "The lightness should be negligible from\n\t{init_col:?}, got\n\t{return_col:?} instead",
+                            ratio <= ACCEPTABLE_ERROR,
+                            "The green should be negligible from\n\t{init_col:?}, got\n\t{return_col:?} instead",
+                        );
+                    }
+
+                    if init_col.blue.abs() > std::f32::EPSILON as f64 {
+                        let error = (init_col.blue - return_col.blue).abs() / init_col.blue.abs();
+                        assert!(
+                            error < ACCEPTABLE_ERROR,
+                            "The blue is too different: \n\tInit {init_col:?}\n\tBack {return_col:?}\n\tError: {}%",
+                            error * 100.0
+                        );
+                    } else {
+                        let ratio = (return_col.blue
+                            / init_col
+                                .red
+                                .max(init_col.green)
+                                .max(init_col.blue)
+                                .max(std::f32::EPSILON as f64))
+                        .abs();
+                        assert!(
+                            ratio <= ACCEPTABLE_ERROR,
+                            "The blue should be negligible from\n\t{init_col:?}, got\n\t{return_col:?} instead",
                         );
                     }
                 }
@@ -835,65 +854,84 @@ mod tests {
 
     #[test]
     fn okhsv_srgb() {
-        todo!("Rewrite the test as sRGB -> Other -> sRGB instead.");
-        let hue_steps = 200;
-        let sat_steps = 200;
-        let val_steps = 200;
-        for hue_step in 0..hue_steps {
-            for sat_step in 0..sat_steps {
-                for val_step in 0..val_steps {
-                    let init_col = OkHsv {
-                        hue: hue_step as f64 * 2.0 * std::f64::consts::PI,
-                        saturation: sat_step as f64 / sat_steps as f64,
-                        value: val_step as f64 / val_steps as f64,
+        let red_steps = 18;
+        let green_steps = 18;
+        let blue_steps = 18;
+        for red_step in 0..red_steps {
+            for green_step in 0..green_steps {
+                for blue_step in 0..blue_steps {
+                    let init_col = Srgb {
+                        red: red_step as f64 / red_steps as f64,
+                        green: green_step as f64 / green_steps as f64,
+                        blue: blue_step as f64 / blue_steps as f64,
                     };
-                    let return_col = OkHsv::from(Srgb::from(init_col));
+                    let return_col = Srgb::from(OkHsv::from(init_col));
                     assert!(
                         return_col.is_normal(),
                         "return_col is not normal\n{init_col:?} became\n{return_col:?}"
                     );
                     // Comparing with f32 epsilon to allow some leeway
-                    if init_col.hue.abs() > std::f32::EPSILON as f64 {
-                        let error = (init_col.hue - return_col.hue).abs() / init_col.hue.abs();
+                    if init_col.red.abs() > std::f32::EPSILON as f64 {
+                        let error = (init_col.red - return_col.red).abs() / init_col.red.abs();
                         assert!(
                             error < ACCEPTABLE_ERROR,
-                            "The hue is too different: \n\tInit {init_col:?}\n\tBack {return_col:?}\n\tError: {}%",
-                            error * 100.0
-                        );
-                    } else if init_col.saturation.abs() >= std::f64::MIN_POSITIVE {
-                        assert!(
-                            return_col.hue.abs() <= std::f32::EPSILON as f64,
-                            "The hue should be negligible from\n\t{init_col:?}, got\n\t{return_col:?} instead",
-                        );
-                    }
-
-                    if init_col.saturation.abs() > std::f32::EPSILON as f64 {
-                        let error = (init_col.saturation - return_col.saturation).abs()
-                            / init_col.saturation.abs();
-                        assert!(
-                            error < ACCEPTABLE_ERROR,
-                            "The saturation is too different: \n\tInit {init_col:?}\n\tBack {return_col:?}\n\tError: {}%",
+                            "The red is too different: \n\tInit {init_col:?}\n\tBack {return_col:?}\n\tError: {}%",
                             error * 100.0
                         );
                     } else {
+                        let ratio = (return_col.red
+                            / init_col
+                                .red
+                                .max(init_col.green)
+                                .max(init_col.blue)
+                                .max(std::f32::EPSILON as f64))
+                        .abs();
                         assert!(
-                            return_col.saturation.abs() <= std::f32::EPSILON as f64,
-                            "The saturation should be negligible from\n\t{init_col:?}, got\n\t{return_col:?} instead",
+                            ratio <= ACCEPTABLE_ERROR,
+                            "The red should be negligible from\n\t{init_col:?}, got\n\t{return_col:?} instead",
                         );
                     }
 
-                    if init_col.value.abs() > std::f32::EPSILON as f64 {
+                    if init_col.green.abs() > std::f32::EPSILON as f64 {
                         let error =
-                            (init_col.value - return_col.value).abs() / init_col.value.abs();
+                            (init_col.green - return_col.green).abs() / init_col.green.abs();
                         assert!(
                             error < ACCEPTABLE_ERROR,
-                            "The value is too different: \n\tInit {init_col:?}\n\tBack {return_col:?}\n\tError: {}%",
+                            "The green is too different: \n\tInit {init_col:?}\n\tBack {return_col:?}\n\tError: {}%",
                             error * 100.0
                         );
                     } else {
+                        let ratio = (return_col.green
+                            / init_col
+                                .red
+                                .max(init_col.green)
+                                .max(init_col.blue)
+                                .max(std::f32::EPSILON as f64))
+                        .abs();
                         assert!(
-                            return_col.value.abs() <= std::f32::EPSILON as f64,
-                            "The value should be negligible from\n\t{init_col:?}, got\n\t{return_col:?} instead",
+                            ratio <= ACCEPTABLE_ERROR,
+                            "The green should be negligible from\n\t{init_col:?}, got\n\t{return_col:?} instead",
+                        );
+                    }
+
+                    if init_col.blue.abs() > std::f32::EPSILON as f64 {
+                        let error = (init_col.blue - return_col.blue).abs() / init_col.blue.abs();
+                        assert!(
+                            error < ACCEPTABLE_ERROR,
+                            "The blue is too different: \n\tInit {init_col:?}\n\tBack {return_col:?}\n\tError: {}%",
+                            error * 100.0
+                        );
+                    } else {
+                        let ratio = (return_col.blue
+                            / init_col
+                                .red
+                                .max(init_col.green)
+                                .max(init_col.blue)
+                                .max(std::f32::EPSILON as f64))
+                        .abs();
+                        assert!(
+                            ratio <= ACCEPTABLE_ERROR,
+                            "The blue should be negligible from\n\t{init_col:?}, got\n\t{return_col:?} instead",
                         );
                     }
                 }
@@ -903,64 +941,84 @@ mod tests {
 
     #[test]
     fn oklab_srgb() {
-        todo!("Rewrite the test as sRGB -> Other -> sRGB instead.");
-        let light_steps = 200;
-        let a_steps = 200;
-        let b_steps = 200;
-        for light_step in 0..light_steps {
-            for a_step in 0..a_steps {
-                for b_step in 0..b_steps {
-                    let init_col = OkLab {
-                        lightness: light_step as f64 / light_steps as f64,
-                        a: -1.0 + 2.0 * a_step as f64 / a_steps as f64,
-                        b: -1.0 + 2.0 * b_step as f64 / b_steps as f64,
+        let red_steps = 18;
+        let green_steps = 18;
+        let blue_steps = 18;
+        for red_step in 0..red_steps {
+            for green_step in 0..green_steps {
+                for blue_step in 0..blue_steps {
+                    let init_col = LinSrgb {
+                        red: red_step as f64 / red_steps as f64,
+                        green: green_step as f64 / green_steps as f64,
+                        blue: blue_step as f64 / blue_steps as f64,
                     };
-                    let return_col = OkLab::from(LinSrgb::from(init_col));
+                    let return_col = LinSrgb::from(OkLab::from(init_col));
                     assert!(
                         return_col.is_normal(),
                         "return_col is not normal\n{init_col:?} became\n{return_col:?}"
                     );
                     // Comparing with f32 epsilon to allow some leeway
-                    if init_col.a.abs() > std::f32::EPSILON as f64 {
-                        let error = (init_col.a - return_col.a).abs() / init_col.a.abs();
+                    if init_col.red.abs() > std::f32::EPSILON as f64 {
+                        let error = (init_col.red - return_col.red).abs() / init_col.red.abs();
                         assert!(
                             error < ACCEPTABLE_ERROR,
-                            "The a is too different: \n\tInit {init_col:?}\n\tBack {return_col:?}\n\tError: {}%",
+                            "The red is too different: \n\tInit {init_col:?}\n\tBack {return_col:?}\n\tError: {}%",
                             error * 100.0
                         );
                     } else {
+                        let ratio = (return_col.red
+                            / init_col
+                                .red
+                                .max(init_col.green)
+                                .max(init_col.blue)
+                                .max(std::f32::EPSILON as f64))
+                        .abs();
                         assert!(
-                            return_col.a.abs() <= std::f32::EPSILON as f64,
-                            "The a should be negligible from\n\t{init_col:?}, got\n\t{return_col:?} instead",
+                            ratio <= ACCEPTABLE_ERROR,
+                            "The red should be negligible from\n\t{init_col:?}, got\n\t{return_col:?} instead",
                         );
                     }
 
-                    if init_col.b.abs() > std::f32::EPSILON as f64 {
-                        let error = (init_col.b - return_col.b).abs() / init_col.b.abs();
+                    if init_col.green.abs() > std::f32::EPSILON as f64 {
+                        let error =
+                            (init_col.green - return_col.green).abs() / init_col.green.abs();
                         assert!(
                             error < ACCEPTABLE_ERROR,
-                            "The b is too different: \n\tInit {init_col:?}\n\tBack {return_col:?}\n\tError: {}%",
+                            "The green is too different: \n\tInit {init_col:?}\n\tBack {return_col:?}\n\tError: {}%",
                             error * 100.0
                         );
                     } else {
+                        let ratio = (return_col.green
+                            / init_col
+                                .red
+                                .max(init_col.green)
+                                .max(init_col.blue)
+                                .max(std::f32::EPSILON as f64))
+                        .abs();
                         assert!(
-                            return_col.b.abs() <= std::f32::EPSILON as f64,
-                            "The b should be negligible from\n\t{init_col:?}, got\n\t{return_col:?} instead",
+                            ratio <= ACCEPTABLE_ERROR,
+                            "The green should be negligible from\n\t{init_col:?}, got\n\t{return_col:?} instead",
                         );
                     }
 
-                    if init_col.lightness.abs() > std::f32::EPSILON as f64 {
-                        let error = (init_col.lightness - return_col.lightness).abs()
-                            / init_col.lightness.abs();
+                    if init_col.blue.abs() > std::f32::EPSILON as f64 {
+                        let error = (init_col.blue - return_col.blue).abs() / init_col.blue.abs();
                         assert!(
                             error < ACCEPTABLE_ERROR,
-                            "The lightness is too different: \n\tInit {init_col:?}\n\tBack {return_col:?}\n\tError: {}%",
+                            "The blue is too different: \n\tInit {init_col:?}\n\tBack {return_col:?}\n\tError: {}%",
                             error * 100.0
                         );
                     } else {
+                        let ratio = (return_col.blue
+                            / init_col
+                                .red
+                                .max(init_col.green)
+                                .max(init_col.blue)
+                                .max(std::f32::EPSILON as f64))
+                        .abs();
                         assert!(
-                            return_col.lightness.abs() <= std::f32::EPSILON as f64,
-                            "The lightness should be negligible from\n\t{init_col:?}, got\n\t{return_col:?} instead",
+                            ratio <= ACCEPTABLE_ERROR,
+                            "The blue should be negligible from\n\t{init_col:?}, got\n\t{return_col:?} instead",
                         );
                     }
                 }
