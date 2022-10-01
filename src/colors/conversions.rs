@@ -184,16 +184,16 @@ impl From<Srgb> for OkHsv {
         let chroma = (lab.a.powi(2) + lab.b.powi(2)).sqrt();
         let saturated_a = if chroma.is_normal() {
             lab.a / chroma
-        } else if lab.a == 0.0 && lab.b == 0.0 {
+        } else if lab.a.is_sign_positive() {
             // Artificially move to a forced chroma if we received 0.0
             1.0
         } else {
-            lab.a
+            -1.0
         };
         let saturated_b = if chroma.is_normal() {
             lab.b / chroma
         } else {
-            lab.b
+            0.0
         };
 
         let hue = saturated_b.atan2(saturated_a);
@@ -372,17 +372,18 @@ impl From<Srgb> for OkHsl {
     fn from(rgb: Srgb) -> Self {
         let lab = OkLab::from(LinSrgb::from(rgb));
 
-        let c = (lab.a.powi(2) + lab.b.powi(2)).sqrt();
-        let a_ = if c > std::f64::EPSILON {
-            lab.a / c
+        let chroma = (lab.a.powi(2) + lab.b.powi(2)).sqrt();
+        let a_ = if chroma.is_normal() {
+            lab.a / chroma
         } else {
             1.0
         };
-        let b_ = if c > std::f64::EPSILON {
-            lab.b / c
+        let b_ = if chroma.is_normal() {
+            lab.b / chroma
         } else {
             0.0
         };
+
         let lightness = lab.lightness;
         let hue = b_.atan2(a_);
 
@@ -397,7 +398,7 @@ impl From<Srgb> for OkHsl {
 
         let saturation = if c_0 == 0.0 && c_max == 0.0 {
             0.0
-        } else if c < c_mid {
+        } else if chroma < c_mid {
             let k_1 = mid * c_0;
             let k_2 = 1.0 - k_1 / c_mid;
             debug_assert!(k_1.is_finite(), "k1 is not normal {k_1:?}");
@@ -405,7 +406,7 @@ impl From<Srgb> for OkHsl {
             debug_assert!(c_mid.is_normal(), "c_mid is not normal {c_mid:?}");
             debug_assert!(c_0.is_normal(), "c_0 is not normal {c_0:?}");
 
-            mid * c / (k_1 + k_2 * c)
+            mid * chroma / (k_1 + k_2 * chroma)
         } else {
             let k_0 = c_mid;
             let k_1 = (1.0 - mid) * c_mid.powi(2) * mid_inv.powi(2) / c_0;
@@ -417,13 +418,13 @@ impl From<Srgb> for OkHsl {
             debug_assert!(c_max.is_normal(), "c_max is not normal {c_max:?}");
             debug_assert!(c_0.is_normal(), "c_0 is not normal {c_0:?}");
 
-            mid + (1.0 - mid) * (c - k_0) / (k_1 + k_2 * (c - k_0))
+            mid + (1.0 - mid) * (chroma - k_0) / (k_1 + k_2 * (chroma - k_0))
         };
 
         Self {
             hue,
             saturation,
-            lightness,
+            lightness: toe(lightness),
         }
     }
 }
@@ -765,11 +766,13 @@ mod tests {
 
     use super::*;
 
+    const STEPS: i32 = 32;
+
     #[test]
     fn okhsl_srgb() {
-        let red_steps = 18;
-        let green_steps = 18;
-        let blue_steps = 18;
+        let red_steps = STEPS;
+        let green_steps = STEPS;
+        let blue_steps = STEPS;
         for red_step in 0..red_steps {
             for green_step in 0..green_steps {
                 for blue_step in 0..blue_steps {
@@ -854,9 +857,9 @@ mod tests {
 
     #[test]
     fn okhsv_srgb() {
-        let red_steps = 18;
-        let green_steps = 18;
-        let blue_steps = 18;
+        let red_steps = STEPS;
+        let green_steps = STEPS;
+        let blue_steps = STEPS;
         for red_step in 0..red_steps {
             for green_step in 0..green_steps {
                 for blue_step in 0..blue_steps {
@@ -941,9 +944,9 @@ mod tests {
 
     #[test]
     fn oklab_srgb() {
-        let red_steps = 18;
-        let green_steps = 18;
-        let blue_steps = 18;
+        let red_steps = STEPS;
+        let green_steps = STEPS;
+        let blue_steps = STEPS;
         for red_step in 0..red_steps {
             for green_step in 0..green_steps {
                 for blue_step in 0..blue_steps {
