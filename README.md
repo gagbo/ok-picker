@@ -4,11 +4,16 @@ SPDX-FileCopyrightText: 2022 Gerry Agbobada <git@gagbo.net>
 SPDX-License-Identifier: CC0-1.0
 -->
 
+![OkHSV colour picker widget](https://i.imgur.com/MNIiV9H.png)
+![OkHSL colour picker widget](https://i.imgur.com/dL9iN5X.png)
+
 # Ok Picker
 
-A toy application to test egui programming. This application will be a color
-picker based on the [Okhsv](https://bottosson.github.io/posts/colorpicker)
-colorspace by Björn Ottosson, with:
+A toy application to test egui programming.
+
+This application will be a color picker based on the
+[Okhsv](https://bottosson.github.io/posts/colorpicker) colorspace by Björn
+Ottosson, with:
 
 - A 2D picker in the SV space,
 - A 1D picker in the Hue space,
@@ -22,4 +27,3 @@ And as stretch goals:
   + Just the foreground color
   + A foreground and a background color
   + A foreground and an accent color
-
