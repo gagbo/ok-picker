@@ -101,7 +101,8 @@ fn color_picker_okhsv_2d_impl(ui: &mut Ui, okhsv: &mut OkHsv) {
     );
     show_color(ui, *okhsv, current_color_size).on_hover_text("Selected color");
 
-    color_text_ui(ui, *okhsv);
+    color_text_okhsv_ui(ui, *okhsv);
+    color_text_rgb_hex_ui(ui, *okhsv);
 
     let current = *okhsv;
 
@@ -146,7 +147,8 @@ fn color_picker_okhsv_circle_impl(ui: &mut Ui, okhsv: &mut OkHsv) {
     );
     show_color(ui, *okhsv, current_color_size).on_hover_text("Selected color");
 
-    color_text_ui(ui, *okhsv);
+    color_text_okhsv_ui(ui, *okhsv);
+    color_text_rgb_hex_ui(ui, *okhsv);
 
     let current = *okhsv;
 
@@ -185,7 +187,8 @@ fn color_picker_okhsl_2d_impl(ui: &mut Ui, okhsl: &mut OkHsl) {
     );
     show_color(ui, *okhsl, current_color_size).on_hover_text("Selected color");
 
-    color_text_ui(ui, *okhsl);
+    color_text_okhsl_ui(ui, *okhsl);
+    color_text_rgb_hex_ui(ui, *okhsl);
 
     let current = *okhsl;
 
@@ -227,55 +230,87 @@ fn color_picker_okhsl_2d_impl(ui: &mut Ui, okhsl: &mut OkHsl) {
     }
 }
 
-fn color_text_ui(ui: &mut Ui, color: impl Into<Srgb>) {
+fn color_text_rgb_dec_ui(ui: &mut Ui, color: impl Into<Srgb>) {
+    let color = color.into();
+    ui.horizontal(|ui| {
+        let Srgb { red, green, blue } = color;
+
+        let r = (256.0 * red).floor() as u8;
+        let g = (256.0 * green).floor() as u8;
+        let b = (256.0 * blue).floor() as u8;
+
+        if ui.button("📋").on_hover_text("Click to copy").clicked() {
+            ui.output().copied_text = format!("{}, {}, {}", r, g, b);
+        }
+
+        ui.label(format!("rgb({}, {}, {})", r, g, b))
+            .on_hover_text("Red Green Blue");
+    });
+}
+
+fn color_text_rgb_hex_ui(ui: &mut Ui, color: impl Into<Srgb>) {
+    let color = color.into();
+    ui.horizontal(|ui| {
+        let Srgb { red, green, blue } = color;
+
+        let r = (256.0 * red).floor() as u8;
+        let g = (256.0 * green).floor() as u8;
+        let b = (256.0 * blue).floor() as u8;
+
+        if ui.button("📋").on_hover_text("Click to copy").clicked() {
+            ui.output().copied_text = format!("#{:02X}{:02X}{:02X}", r, g, b);
+        }
+
+        ui.label(format!("rgb(#{:02X}{:02X}{:02X})", r, g, b))
+            .on_hover_text("Red Green Blue, Hex");
+    });
+}
+fn color_text_okhsv_ui(ui: &mut Ui, color: impl Into<OkHsv>) {
+    let hsv = color.into();
+    ui.horizontal(|ui| {
+        if ui.button("📋").on_hover_text("Click to copy").clicked() {
+            ui.output().copied_text = format!("{}, {}, {}", hsv.hue, hsv.saturation, hsv.value);
+        }
+
+        // Approx 512 even steps for the rounding
+        let trunc = 1.0 / 2.0_f64.powi(8);
+
+        ui.label(format!(
+            "okhsv({}, {}, {})",
+            trunc * (hsv.hue / trunc).trunc(),
+            trunc * (hsv.saturation / trunc).trunc(),
+            trunc * (hsv.value / trunc).trunc()
+        ))
+        .on_hover_text("Hue Saturation Value, OkHSV");
+    });
+}
+fn color_text_okhsl_ui(ui: &mut Ui, color: impl Into<OkHsl>) {
+    let hsl = color.into();
+    ui.horizontal(|ui| {
+        if ui.button("📋").on_hover_text("Click to copy").clicked() {
+            ui.output().copied_text = format!("{}, {}, {}", hsl.hue, hsl.saturation, hsl.lightness);
+        }
+
+        // Approx 512 even steps for the rounding
+        let trunc = 1.0 / 2.0_f64.powi(8);
+
+        ui.label(format!(
+            "okhsl({}, {}, {})",
+            trunc * (hsl.hue / trunc).trunc(),
+            trunc * (hsl.saturation / trunc).trunc(),
+            trunc * (hsl.lightness / trunc).trunc()
+        ))
+        .on_hover_text("Hue Saturation Lightness, OkHSL");
+    });
+}
+
+pub fn color_text_ui(ui: &mut Ui, color: impl Into<Srgb>) {
     let color = color.into();
     ui.vertical_centered(|ui| {
-        ui.horizontal(|ui| {
-            let Srgb { red, green, blue } = color;
-
-            let r = (256.0 * red).floor() as u8;
-            let g = (256.0 * green).floor() as u8;
-            let b = (256.0 * blue).floor() as u8;
-
-            if ui.button("📋").on_hover_text("Click to copy").clicked() {
-                ui.output().copied_text = format!("{}, {}, {}", r, g, b);
-            }
-
-            ui.label(format!("rgb({}, {}, {})", r, g, b))
-                .on_hover_text("Red Green Blue");
-        });
-        ui.horizontal(|ui| {
-            let Srgb { red, green, blue } = color;
-
-            let r = (256.0 * red).floor() as u8;
-            let g = (256.0 * green).floor() as u8;
-            let b = (256.0 * blue).floor() as u8;
-
-            if ui.button("📋").on_hover_text("Click to copy").clicked() {
-                ui.output().copied_text = format!("#{:02X}{:02X}{:02X}", r, g, b);
-            }
-
-            ui.label(format!("rgb(#{:02X}{:02X}{:02X})", r, g, b))
-                .on_hover_text("Red Green Blue, Hex");
-        });
-        ui.horizontal(|ui| {
-            let hsv = OkHsv::from(color);
-
-            if ui.button("📋").on_hover_text("Click to copy").clicked() {
-                ui.output().copied_text = format!("{}, {}, {}", hsv.hue, hsv.saturation, hsv.value);
-            }
-
-            // Approx 512 even steps for the rounding
-            let trunc = 1.0 / 2.0_f64.powi(9);
-
-            ui.label(format!(
-                "okhsv({}, {}, {})",
-                trunc * (hsv.hue / trunc).trunc(),
-                trunc * (hsv.saturation / trunc).trunc(),
-                trunc * (hsv.value / trunc).trunc()
-            ))
-            .on_hover_text("Hue Saturation Value, OkHSV");
-        });
+        color_text_okhsl_ui(ui, color);
+        color_text_okhsv_ui(ui, color);
+        color_text_rgb_dec_ui(ui, color);
+        color_text_rgb_hex_ui(ui, color);
     });
 }
 

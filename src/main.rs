@@ -117,9 +117,9 @@ impl eframe::App for OkPicker {
                 ui.add_space(5.0);
 
                 ui.vertical_centered(|ui| {
-                    ui.label("OkHSV circle");
+                    ui.label("OkHSL");
                     ui.spacing_mut().slider_width = 100.0;
-                    widgets::color_picker_okhsv_circle(ui, &mut self.colour_too);
+                    widgets::color_picker_okhsl_2d(ui, &mut self.colour_too);
                 });
             });
         });
