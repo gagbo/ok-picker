@@ -6,9 +6,10 @@ use std::f64::consts::PI;
 
 use eframe::{
     egui::{
-        color_picker::show_color, lerp, pos2, remap_clamp, vec2, Color32, Mesh, Painter, Rect,
-        Response, Rgba, Sense, Shape, Stroke, Ui, Vec2,
+        color_picker::show_color, lerp, pos2, remap_clamp, vec2, Color32, Layout, Mesh, Painter,
+        Rect, Response, Rgba, Sense, Shape, Stroke, Ui, Vec2,
     },
+    emath::Align,
     epaint,
 };
 
@@ -25,9 +26,8 @@ const N: u32 = 6 * 6;
 pub fn color_picker_okhsv_2d(ui: &mut Ui, current_color: &mut Srgb) -> bool {
     let mut new_okhsv = OkHsv::from(*current_color);
 
-    ui.vertical_centered(|ui| {
-        color_picker_okhsv_2d_impl(ui, &mut new_okhsv);
-    });
+    // TODO: Add desired size argument to respect the centered layout
+    color_picker_okhsv_2d_impl(ui, &mut new_okhsv);
 
     let new_color = Srgb::from(new_okhsv);
     let sq_distance = (current_color.red - new_color.red).powi(2)
@@ -50,9 +50,8 @@ pub fn color_picker_okhsv_2d(ui: &mut Ui, current_color: &mut Srgb) -> bool {
 pub fn color_picker_okhsv_circle(ui: &mut Ui, current_color: &mut Srgb) -> bool {
     let mut new_okhsv = OkHsv::from(*current_color);
 
-    ui.vertical_centered(|ui| {
-        color_picker_okhsv_circle_impl(ui, &mut new_okhsv);
-    });
+    // TODO: Add desired size argument to respect the centered layout
+    color_picker_okhsv_circle_impl(ui, &mut new_okhsv);
 
     let new_color = Srgb::from(new_okhsv);
     let sq_distance = (current_color.red - new_color.red).powi(2)
@@ -75,9 +74,8 @@ pub fn color_picker_okhsv_circle(ui: &mut Ui, current_color: &mut Srgb) -> bool 
 pub fn color_picker_okhsl_2d(ui: &mut Ui, current_color: &mut Srgb) -> bool {
     let mut new_okhsl = OkHsl::from(*current_color);
 
-    ui.vertical_centered(|ui| {
-        color_picker_okhsl_2d_impl(ui, &mut new_okhsl);
-    });
+    // TODO: Add desired size argument to respect the centered layout
+    color_picker_okhsl_2d_impl(ui, &mut new_okhsl);
 
     let new_color = Srgb::from(new_okhsl);
     let sq_distance = (current_color.red - new_color.red).powi(2)
@@ -198,16 +196,25 @@ fn color_picker_okhsl_2d_impl(ui: &mut Ui, okhsl: &mut OkHsl) {
         lightness,
     } = okhsl;
 
-    color_slider_1d(ui, hue, -PI, PI, |hue| {
-        OkHsv::from(Srgb::from(OkHsl { hue, ..current }))
-    })
-    .on_hover_text("Hue");
+    ui.allocate_ui_with_layout(
+        vec2(
+            2.0 * ui.spacing().slider_width + ui.spacing().interact_size.y,
+            2.0 * ui.spacing().slider_width,
+        ),
+        Layout::left_to_right(Align::Center),
+        |ui| {
+            color_slider_circle(ui, saturation, hue, |saturation, hue| OkHsl {
+                saturation: saturation as f64,
+                hue: hue as f64,
+                ..current
+            });
 
-    color_slider_circle(ui, saturation, hue, |saturation, hue| OkHsl {
-        saturation: saturation as f64,
-        hue: hue as f64,
-        ..current
-    });
+            color_slider_vertical_1d(ui, hue, -PI, PI, |hue| {
+                OkHsv::from(Srgb::from(OkHsl { hue, ..current }))
+            })
+            .on_hover_text("Hue");
+        },
+    );
 
     if true {
         color_slider_1d(ui, saturation, 0.0, 1.0, |saturation| {
@@ -232,6 +239,7 @@ fn color_picker_okhsl_2d_impl(ui: &mut Ui, okhsl: &mut OkHsl) {
 
 fn color_text_rgb_dec_ui(ui: &mut Ui, color: impl Into<Srgb>) {
     let color = color.into();
+    // TODO: Use allocate_ui to respect the centered layout
     ui.horizontal(|ui| {
         let Srgb { red, green, blue } = color;
 
@@ -250,6 +258,7 @@ fn color_text_rgb_dec_ui(ui: &mut Ui, color: impl Into<Srgb>) {
 
 fn color_text_rgb_hex_ui(ui: &mut Ui, color: impl Into<Srgb>) {
     let color = color.into();
+    // TODO: Use allocate_ui to respect the centered layout
     ui.horizontal(|ui| {
         let Srgb { red, green, blue } = color;
 
@@ -267,6 +276,7 @@ fn color_text_rgb_hex_ui(ui: &mut Ui, color: impl Into<Srgb>) {
 }
 fn color_text_okhsv_ui(ui: &mut Ui, color: impl Into<OkHsv>) {
     let hsv = color.into();
+    // TODO: Use allocate_ui to respect the centered layout
     ui.horizontal(|ui| {
         if ui.button("📋").on_hover_text("Click to copy").clicked() {
             ui.output().copied_text = format!("{}, {}, {}", hsv.hue, hsv.saturation, hsv.value);
@@ -284,8 +294,10 @@ fn color_text_okhsv_ui(ui: &mut Ui, color: impl Into<OkHsv>) {
         .on_hover_text("Hue Saturation Value, OkHSV");
     });
 }
+
 fn color_text_okhsl_ui(ui: &mut Ui, color: impl Into<OkHsl>) {
     let hsl = color.into();
+    // TODO: Use allocate_ui to respect the centered layout
     ui.horizontal(|ui| {
         if ui.button("📋").on_hover_text("Click to copy").clicked() {
             ui.output().copied_text = format!("{}, {}, {}", hsl.hue, hsl.saturation, hsl.lightness);
@@ -306,12 +318,10 @@ fn color_text_okhsl_ui(ui: &mut Ui, color: impl Into<OkHsl>) {
 
 pub fn color_text_ui(ui: &mut Ui, color: impl Into<Srgb>) {
     let color = color.into();
-    ui.vertical_centered(|ui| {
-        color_text_okhsl_ui(ui, color);
-        color_text_okhsv_ui(ui, color);
-        color_text_rgb_dec_ui(ui, color);
-        color_text_rgb_hex_ui(ui, color);
-    });
+    color_text_okhsl_ui(ui, color);
+    color_text_okhsv_ui(ui, color);
+    color_text_rgb_dec_ui(ui, color);
+    color_text_rgb_hex_ui(ui, color);
 }
 
 fn color_slider_1d(
@@ -375,6 +385,77 @@ fn color_slider_1d(
                     pos2(x, rect.center().y),   // tip
                     pos2(x + r, rect.bottom()), // right bottom
                     pos2(x - r, rect.bottom()), // left bottom
+                ],
+                picked_color,
+                Stroke::new(visuals.fg_stroke.width, contrast_color(picked_color)),
+            ));
+        }
+    }
+
+    response
+}
+
+fn color_slider_vertical_1d(
+    ui: &mut Ui,
+    value: &mut f64,
+    min: f64,
+    max: f64,
+    color_at: impl Fn(f64) -> OkHsv,
+) -> Response {
+    #![allow(clippy::identity_op)]
+
+    let span = max - min;
+
+    let desired_size = vec2(
+        ui.spacing().interact_size.y,
+        2.0 * ui.spacing().slider_width,
+    );
+    let (rect, response) = ui.allocate_at_least(desired_size, Sense::click_and_drag());
+
+    if let Some(mpos) = response.interact_pointer_pos() {
+        *value = min + span * remap_clamp(mpos.y, rect.top()..=rect.bottom(), 0.0..=1.0) as f64;
+    }
+
+    if ui.is_rect_visible(rect) {
+        let visuals = ui.style().interact(&response);
+
+        background_checkers(ui.painter(), rect); // for alpha:
+
+        {
+            // fill color:
+            let mut mesh = Mesh::default();
+            for i in 0..=N {
+                let t = min + (i as f64 * span / (N as f64));
+                let color = color_at(t);
+                let y = lerp(
+                    rect.top()..=rect.bottom(),
+                    (t as f32 - min as f32) / span as f32,
+                );
+                mesh.colored_vertex(pos2(rect.left(), y), color.into());
+                mesh.colored_vertex(pos2(rect.right(), y), color.into());
+                if i < N {
+                    mesh.add_triangle(2 * i + 0, 2 * i + 1, 2 * i + 2);
+                    mesh.add_triangle(2 * i + 1, 2 * i + 2, 2 * i + 3);
+                }
+            }
+            ui.painter().add(Shape::mesh(mesh));
+        }
+
+        ui.painter().rect_stroke(rect, 0.0, visuals.bg_stroke); // outline
+
+        {
+            // Show where the slider is at:
+            let y = lerp(
+                rect.top()..=rect.bottom(),
+                (*value as f32 - min as f32) / span as f32,
+            );
+            let r = rect.width() / 4.0;
+            let picked_color = color_at(*value);
+            ui.painter().add(Shape::convex_polygon(
+                vec![
+                    pos2(rect.center().x, y), // tip
+                    pos2(rect.left(), y + r), // left bottom
+                    pos2(rect.left(), y - r), // left top
                 ],
                 picked_color,
                 Stroke::new(visuals.fg_stroke.width, contrast_color(picked_color)),

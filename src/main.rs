@@ -2,9 +2,12 @@
 //
 // SPDX-License-Identifier: GPL-3.0-only
 
-use eframe::egui::{
-    self, CentralPanel, Context, FontData, FontDefinitions, FontFamily, Hyperlink, ScrollArea,
-    TopBottomPanel, Vec2,
+use eframe::{
+    egui::{
+        self, CentralPanel, Context, FontData, FontDefinitions, FontFamily, Hyperlink, Layout,
+        ScrollArea, TopBottomPanel, Vec2,
+    },
+    emath::Align,
 };
 use ok_picker::{colors, widgets};
 
@@ -92,7 +95,7 @@ impl eframe::App for OkPicker {
         render_header(ctx);
         CentralPanel::default().show(ctx, |ui| {
             ScrollArea::vertical().show(ui, |ui| {
-                ui.vertical_centered(|ui| {
+                ui.with_layout(Layout::top_down(Align::Center), |ui| {
                     ui.label("RGB");
                     ui.spacing_mut().slider_width = 100.0;
                     egui::widgets::color_picker::color_picker_hsva_2d(
@@ -106,7 +109,7 @@ impl eframe::App for OkPicker {
                 ui.separator();
                 ui.add_space(5.0);
 
-                ui.vertical_centered(|ui| {
+                ui.with_layout(Layout::top_down(Align::Center), |ui| {
                     ui.label("OkHSV");
                     ui.spacing_mut().slider_width = 100.0;
                     widgets::color_picker_okhsv_2d(ui, &mut self.colour);
@@ -116,7 +119,7 @@ impl eframe::App for OkPicker {
                 ui.separator();
                 ui.add_space(5.0);
 
-                ui.vertical_centered(|ui| {
+                ui.with_layout(Layout::top_down(Align::Center), |ui| {
                     ui.label("OkHSL");
                     ui.spacing_mut().slider_width = 100.0;
                     widgets::color_picker_okhsl_2d(ui, &mut self.colour_too);
