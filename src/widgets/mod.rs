@@ -26,7 +26,6 @@ const N: u32 = 6 * 6;
 pub fn color_picker_okhsv_2d(ui: &mut Ui, current_color: &mut Srgb) -> bool {
     let mut new_okhsv = OkHsv::from(*current_color);
 
-    // TODO: Add desired size argument to respect the centered layout
     color_picker_okhsv_2d_impl(ui, &mut new_okhsv);
 
     let new_color = Srgb::from(new_okhsv);
@@ -50,7 +49,6 @@ pub fn color_picker_okhsv_2d(ui: &mut Ui, current_color: &mut Srgb) -> bool {
 pub fn color_picker_okhsv_circle(ui: &mut Ui, current_color: &mut Srgb) -> bool {
     let mut new_okhsv = OkHsv::from(*current_color);
 
-    // TODO: Add desired size argument to respect the centered layout
     color_picker_okhsv_circle_impl(ui, &mut new_okhsv);
 
     let new_color = Srgb::from(new_okhsv);
@@ -74,7 +72,6 @@ pub fn color_picker_okhsv_circle(ui: &mut Ui, current_color: &mut Srgb) -> bool 
 pub fn color_picker_okhsl_2d(ui: &mut Ui, current_color: &mut Srgb) -> bool {
     let mut new_okhsl = OkHsl::from(*current_color);
 
-    // TODO: Add desired size argument to respect the centered layout
     color_picker_okhsl_2d_impl(ui, &mut new_okhsl);
 
     let new_color = Srgb::from(new_okhsl);
@@ -239,81 +236,106 @@ fn color_picker_okhsl_2d_impl(ui: &mut Ui, okhsl: &mut OkHsl) {
 
 fn color_text_rgb_dec_ui(ui: &mut Ui, color: impl Into<Srgb>) {
     let color = color.into();
-    // TODO: Use allocate_ui to respect the centered layout
-    ui.horizontal(|ui| {
-        let Srgb { red, green, blue } = color;
+    ui.allocate_ui_with_layout(
+        vec2(
+            2.0 * ui.spacing().slider_width,
+            ui.spacing().interact_size.y,
+        ),
+        Layout::left_to_right(Align::Center),
+        |ui| {
+            let Srgb { red, green, blue } = color;
 
-        let r = (256.0 * red).floor() as u8;
-        let g = (256.0 * green).floor() as u8;
-        let b = (256.0 * blue).floor() as u8;
+            let r = (256.0 * red).floor() as u8;
+            let g = (256.0 * green).floor() as u8;
+            let b = (256.0 * blue).floor() as u8;
 
-        if ui.button("📋").on_hover_text("Click to copy").clicked() {
-            ui.output().copied_text = format!("{}, {}, {}", r, g, b);
-        }
+            if ui.button("📋").on_hover_text("Click to copy").clicked() {
+                ui.output().copied_text = format!("{}, {}, {}", r, g, b);
+            }
 
-        ui.label(format!("rgb({}, {}, {})", r, g, b))
-            .on_hover_text("Red Green Blue");
-    });
+            ui.label(format!("rgb({}, {}, {})", r, g, b))
+                .on_hover_text("Red Green Blue");
+        },
+    );
 }
 
 fn color_text_rgb_hex_ui(ui: &mut Ui, color: impl Into<Srgb>) {
     let color = color.into();
-    // TODO: Use allocate_ui to respect the centered layout
-    ui.horizontal(|ui| {
-        let Srgb { red, green, blue } = color;
+    ui.allocate_ui_with_layout(
+        vec2(
+            2.0 * ui.spacing().slider_width,
+            ui.spacing().interact_size.y,
+        ),
+        Layout::left_to_right(Align::Center),
+        |ui| {
+            let Srgb { red, green, blue } = color;
 
-        let r = (256.0 * red).floor() as u8;
-        let g = (256.0 * green).floor() as u8;
-        let b = (256.0 * blue).floor() as u8;
+            let r = (256.0 * red).floor() as u8;
+            let g = (256.0 * green).floor() as u8;
+            let b = (256.0 * blue).floor() as u8;
 
-        if ui.button("📋").on_hover_text("Click to copy").clicked() {
-            ui.output().copied_text = format!("#{:02X}{:02X}{:02X}", r, g, b);
-        }
+            if ui.button("📋").on_hover_text("Click to copy").clicked() {
+                ui.output().copied_text = format!("#{:02X}{:02X}{:02X}", r, g, b);
+            }
 
-        ui.label(format!("rgb(#{:02X}{:02X}{:02X})", r, g, b))
-            .on_hover_text("Red Green Blue, Hex");
-    });
+            ui.label(format!("rgb(#{:02X}{:02X}{:02X})", r, g, b))
+                .on_hover_text("Red Green Blue, Hex");
+        },
+    );
 }
 fn color_text_okhsv_ui(ui: &mut Ui, color: impl Into<OkHsv>) {
     let hsv = color.into();
-    // TODO: Use allocate_ui to respect the centered layout
-    ui.horizontal(|ui| {
-        if ui.button("📋").on_hover_text("Click to copy").clicked() {
-            ui.output().copied_text = format!("{}, {}, {}", hsv.hue, hsv.saturation, hsv.value);
-        }
+    ui.allocate_ui_with_layout(
+        vec2(
+            2.0 * ui.spacing().slider_width,
+            ui.spacing().interact_size.y,
+        ),
+        Layout::left_to_right(Align::Center),
+        |ui| {
+            if ui.button("📋").on_hover_text("Click to copy").clicked() {
+                ui.output().copied_text = format!("{}, {}, {}", hsv.hue, hsv.saturation, hsv.value);
+            }
 
-        // Approx 512 even steps for the rounding
-        let trunc = 1.0 / 2.0_f64.powi(8);
+            // Approx 512 even steps for the rounding
+            let trunc = 1.0 / 2.0_f64.powi(8);
 
-        ui.label(format!(
-            "okhsv({}, {}, {})",
-            trunc * (hsv.hue / trunc).trunc(),
-            trunc * (hsv.saturation / trunc).trunc(),
-            trunc * (hsv.value / trunc).trunc()
-        ))
-        .on_hover_text("Hue Saturation Value, OkHSV");
-    });
+            ui.label(format!(
+                "okhsv({}, {}, {})",
+                trunc * (hsv.hue / trunc).trunc(),
+                trunc * (hsv.saturation / trunc).trunc(),
+                trunc * (hsv.value / trunc).trunc()
+            ))
+            .on_hover_text("Hue Saturation Value, OkHSV");
+        },
+    );
 }
 
 fn color_text_okhsl_ui(ui: &mut Ui, color: impl Into<OkHsl>) {
     let hsl = color.into();
-    // TODO: Use allocate_ui to respect the centered layout
-    ui.horizontal(|ui| {
-        if ui.button("📋").on_hover_text("Click to copy").clicked() {
-            ui.output().copied_text = format!("{}, {}, {}", hsl.hue, hsl.saturation, hsl.lightness);
-        }
+    ui.allocate_ui_with_layout(
+        vec2(
+            2.0 * ui.spacing().slider_width,
+            ui.spacing().interact_size.y,
+        ),
+        Layout::left_to_right(Align::Center),
+        |ui| {
+            if ui.button("📋").on_hover_text("Click to copy").clicked() {
+                ui.output().copied_text =
+                    format!("{}, {}, {}", hsl.hue, hsl.saturation, hsl.lightness);
+            }
 
-        // Approx 512 even steps for the rounding
-        let trunc = 1.0 / 2.0_f64.powi(8);
+            // Approx 512 even steps for the rounding
+            let trunc = 1.0 / 2.0_f64.powi(8);
 
-        ui.label(format!(
-            "okhsl({}, {}, {})",
-            trunc * (hsl.hue / trunc).trunc(),
-            trunc * (hsl.saturation / trunc).trunc(),
-            trunc * (hsl.lightness / trunc).trunc()
-        ))
-        .on_hover_text("Hue Saturation Lightness, OkHSL");
-    });
+            ui.label(format!(
+                "okhsl({}, {}, {})",
+                trunc * (hsl.hue / trunc).trunc(),
+                trunc * (hsl.saturation / trunc).trunc(),
+                trunc * (hsl.lightness / trunc).trunc()
+            ))
+            .on_hover_text("Hue Saturation Lightness, OkHSL");
+        },
+    );
 }
 
 pub fn color_text_ui(ui: &mut Ui, color: impl Into<Srgb>) {
@@ -581,8 +603,6 @@ where
         ui.painter().add(Shape::mesh(mesh)); // fill
 
         ui.painter().rect_stroke(rect, 0.0, visuals.bg_stroke); // outline
-
-        // TODO: Fix the slider position so that it shows correctly
 
         // Show where the slider is at:
         // let actual_r = lerp(0.0..=r_max.into(), *r);
