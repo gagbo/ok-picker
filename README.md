@@ -5,7 +5,7 @@ SPDX-License-Identifier: CC0-1.0
 -->
 
 ![OkHSV colour picker widget](https://i.imgur.com/MNIiV9H.png)
-![OkHSL colour picker widget](https://i.imgur.com/dL9iN5X.png)
+![OkHSL colour picker widget](https://i.imgur.com/eGTA5G2.png)
 
 # Ok Picker
 
