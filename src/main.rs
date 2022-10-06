@@ -112,7 +112,7 @@ impl eframe::App for OkPicker {
                 ui.with_layout(Layout::top_down(Align::Center), |ui| {
                     ui.label("OkHSV");
                     ui.spacing_mut().slider_width = 100.0;
-                    widgets::color_picker_okhsv_2d(ui, &mut self.colour);
+                    widgets::okhsv::color_picker_2d(ui, &mut self.colour);
                 });
 
                 ui.add_space(5.0);
@@ -122,7 +122,7 @@ impl eframe::App for OkPicker {
                 ui.with_layout(Layout::top_down(Align::Center), |ui| {
                     ui.label("OkHSL");
                     ui.spacing_mut().slider_width = 100.0;
-                    widgets::color_picker_okhsl_2d(ui, &mut self.colour_too);
+                    widgets::okhsl::color_picker_circle(ui, &mut self.colour_too);
                 });
             });
         });
